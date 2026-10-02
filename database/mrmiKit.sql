@@ -2,7 +2,7 @@ CREATE DATABASE IF NOT EXISTS mrmiKit CHARACTER SET utf8mb4 COLLATE utf8mb4_unic
 USE mrmiKit;
 
 CREATE TABLE users (id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(50) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL, nama VARCHAR(150) NOT NULL, role VARCHAR(30) NOT NULL DEFAULT 'admin', aktif TINYINT(1) NOT NULL DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
-INSERT INTO users(username,password_hash,nama,role) VALUES ('admin', '$2y$10$6eVqv1L6J9vQJ4wK5nY7QeT5kW1s8cH4fH8V0q0D2xXj3mJ7bY6uK', 'Administrator IT', 'admin');
+INSERT INTO users(username,password_hash,nama,role) VALUES ('admin', '$2y$12$Ha.uANREfvtDU40P.dbyteFioAFpu9HS/zS2SH693O3uOW.AMfDRS', 'Administrator IT', 'admin');
 
 CREATE TABLE elemen_penilaian (id INT AUTO_INCREMENT PRIMARY KEY, codigo VARCHAR(30), kode VARCHAR(30) UNIQUE NOT NULL, kategori VARCHAR(100), judul VARCHAR(255) NOT NULL, deskripsi TEXT, urutan INT NOT NULL DEFAULT 0);
 INSERT INTO elemen_penilaian(kode,kategori,judul,deskripsi,urutan) VALUES
