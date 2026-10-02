@@ -107,14 +107,26 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                 $start=new DateTime(sprintf('%04d-%02d-01 00:00:00',$tahun,$bulan));
                 $end=(clone $start)->modify('+1 month');
                 $totalSeconds=$end->getTimestamp()-$start->getTimestamp();
-                $downSeconds=0;
+                $intervals=[];
                 foreach($events as $ev){
                     $ds=new DateTime($ev['mulai']);
                     $de=new DateTime($ev['selesai']);
                     $clipStart=$ds>$start?$ds:$start;
                     $clipEnd=$de<$end?$de:$end;
-                    if($clipEnd>$clipStart) $downSeconds += $clipEnd->getTimestamp()-$clipStart->getTimestamp();
+                    if($clipEnd>$clipStart) $intervals[]=[$clipStart->getTimestamp(),$clipEnd->getTimestamp()];
                 }
+                // Gabungkan interval yang tumpang tindih agar downtime tidak dihitung dua kali.
+                usort($intervals,fn($a,$b)=>$a[0]<=>$b[0]);
+                $merged=[];
+                foreach($intervals as $iv){
+                    if(!$merged || $iv[0]>$merged[count($merged)-1][1]) $merged[]=$iv;
+                    else $merged[count($merged)-1][1]=max($merged[count($merged)-1][1],$iv[1]);
+                }
+                // Tidak ada catatan downtime bukan berarti otomatis 100%.
+                if(!$merged) continue;
+
+                $downSeconds=0;
+                foreach($merged as $iv) $downSeconds += $iv[1]-$iv[0];
                 $totalHours=$totalSeconds/3600;
                 $downHours=$downSeconds/3600;
                 $availableHours=max(0,$totalHours-$downHours);
@@ -128,7 +140,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                 $up->execute([$indikator_id,$start->format('Y-m-d'),round($availableHours,4),round($totalHours,4),round($cap,4),$target,$analisis,$rtl,$status,$_SESSION['user']['id']??null]);
                 $hasil++;
             }
-            $msg="Capaian IM-IT-01 tahun {$tahun} dihitung dari log Downtime ({$hasil} bulan). Periksa kembali data downtime sebelum dijadikan laporan.";
+            $msg="IM-IT-01 dihitung hanya dari bulan yang memiliki catatan downtime. Bulan tanpa catatan tidak otomatis dianggap 100%; validasi/isi melalui Capaian 12 Bulan. Bulan terhitung: {$hasil}.";
         }
 
         if ($action==='save_capaian_bulanan') {
@@ -391,12 +403,15 @@ require __DIR__.'/../partials/header.php';
   <div><h6 class="mb-1">⚙️ Hitung otomatis dari Downtime SIMRS</h6>
    <div class="small text-muted">Ambil semua catatan Downtime yang tercatat di menu Downtime, potong otomatis jika melewati batas bulan, lalu hitung waktu tersedia dan persentase ketersediaan.</div>
   </div>
-  <form method="post" class="m-0" onsubmit="return confirm('Hitung ulang IM-IT-01 dari log Downtime untuk tahun <?=h($year)?>? Data N/D/Capaian tahun ini akan diperbarui.');">
-   <input type="hidden" name="action" value="hitung_ketersediaan_simrs">
-   <input type="hidden" name="indikator_id" value="<?=$detail['id']?>">
-   <input type="hidden" name="tahun" value="<?=$year?>">
-   <button class="btn btn-success">🔄 Hitung dari Downtime</button>
-  </form>
+<div class="d-flex gap-2 flex-wrap">
+   <a class="btn btn-outline-success" href="../downtime/tambah.php">➕ Catat Downtime</a>
+   <form method="post" class="m-0" onsubmit="return confirm('Hitung ulang IM-IT-01 dari log Downtime untuk tahun <?=h($year)?>? Hanya bulan yang memiliki catatan downtime yang akan dihitung.');">
+    <input type="hidden" name="action" value="hitung_ketersediaan_simrs">
+    <input type="hidden" name="indikator_id" value="<?=$detail['id']?>">
+    <input type="hidden" name="tahun" value="<?=$year?>">
+    <button class="btn btn-success">🔄 Hitung dari Downtime</button>
+   </form>
+  </div>
  </div>
  <div class="alert alert-warning mt-3 mb-0 small">Gunakan menu <strong>Downtime</strong> hanya untuk kejadian yang memang memengaruhi ketersediaan SIMRS. Contoh: server/aplikasi/database SIMRS tidak dapat digunakan. Jangan memasukkan gangguan lain yang tidak memengaruhi SIMRS.</div>
 </div></div>
