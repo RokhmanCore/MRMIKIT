@@ -81,6 +81,56 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             }
         }
 
+        if ($action==='hitung_ketersediaan_simrs') {
+            $indikator_id=(int)($_POST['indikator_id']??0);
+            $tahun=(int)($_POST['tahun']??date('Y'));
+            if($indikator_id<1 || $tahun<2020 || $tahun>2100) throw new RuntimeException('Indikator atau tahun tidak valid.');
+
+            $st=$pdo->prepare("SELECT * FROM mutu_indikator WHERE id=?");
+            $st->execute([$indikator_id]); $ind=$st->fetch();
+            if(!$ind) throw new RuntimeException('Indikator tidak ditemukan.');
+            if($ind['kode']!=='IM-IT-01') throw new RuntimeException('Fitur ini khusus IM-IT-01 Ketersediaan SIMRS.');
+
+            $events=$pdo->query("SELECT mulai,selesai FROM downtime WHERE selesai IS NOT NULL AND selesai>mulai ORDER BY mulai")->fetchAll();
+            $st=$pdo->prepare("SELECT id,periode,numerator,denominator,capaian,target_snapshot,analisis,tindak_lanjut,status FROM mutu_capaian WHERE indikator_id=? AND periode BETWEEN ? AND ?");
+            $st->execute([$indikator_id,sprintf('%04d-01-01',$tahun),sprintf('%04d-12-31',$tahun)]);
+            $existing=[]; foreach($st as $rr) $existing[(int)date('n',strtotime($rr['periode']))]=$rr;
+
+            $up=$pdo->prepare("INSERT INTO mutu_capaian
+                (indikator_id,periode,numerator,denominator,capaian,target_snapshot,analisis,tindak_lanjut,status,created_by)
+                VALUES (?,?,?,?,?,?,?,?,?,?)
+                ON DUPLICATE KEY UPDATE numerator=VALUES(numerator),denominator=VALUES(denominator),capaian=VALUES(capaian),
+                target_snapshot=VALUES(target_snapshot),status=VALUES(status),updated_at=CURRENT_TIMESTAMP");
+
+            $hasil=0;
+            for($bulan=1;$bulan<=12;$bulan++){
+                $start=new DateTime(sprintf('%04d-%02d-01 00:00:00',$tahun,$bulan));
+                $end=(clone $start)->modify('+1 month');
+                $totalSeconds=$end->getTimestamp()-$start->getTimestamp();
+                $downSeconds=0;
+                foreach($events as $ev){
+                    $ds=new DateTime($ev['mulai']);
+                    $de=new DateTime($ev['selesai']);
+                    $clipStart=$ds>$start?$ds:$start;
+                    $clipEnd=$de<$end?$de:$end;
+                    if($clipEnd>$clipStart) $downSeconds += $clipEnd->getTimestamp()-$clipStart->getTimestamp();
+                }
+                $totalHours=$totalSeconds/3600;
+                $downHours=$downSeconds/3600;
+                $availableHours=max(0,$totalHours-$downHours);
+                $cap=$totalHours>0?($availableHours/$totalHours)*100:0;
+                $target=$ind['target']!==null?(float)$ind['target']:null;
+                $status='belum_dinilai';
+                if($target!==null) $status=($cap >= $target)?'tercapai':'tidak_tercapai';
+                $old=$existing[$bulan]??[];
+                $analisis=$old['analisis']??'';
+                $rtl=$old['tindak_lanjut']??'';
+                $up->execute([$indikator_id,$start->format('Y-m-d'),round($availableHours,4),round($totalHours,4),round($cap,4),$target,$analisis,$rtl,$status,$_SESSION['user']['id']??null]);
+                $hasil++;
+            }
+            $msg="Capaian IM-IT-01 tahun {$tahun} dihitung dari log Downtime ({$hasil} bulan). Periksa kembali data downtime sebelum dijadikan laporan.";
+        }
+
         if ($action==='save_capaian_bulanan') {
             $indikator_id=(int)($_POST['indikator_id']??0);
             $tahun=(int)($_POST['tahun']??date('Y'));
@@ -334,6 +384,23 @@ require __DIR__.'/../partials/header.php';
  <div class="d-flex justify-content-between align-items-center"><h6 class="mb-0">Grafik tren 12 bulan <?=h($year)?></h6><span class="small text-muted">Garis target = <?=h($detail['target']??'-')?> <?=h($detail['satuan'])?></span></div>
  <div class="chart-wrap mt-2"><canvas id="trendChart" aria-label="Grafik tren capaian 12 bulan"></canvas></div>
 </div></div>
+
+<?php if(($detail['kode']??'')==='IM-IT-01'): ?>
+<div class="card border-success shadow-sm mb-4"><div class="card-body">
+ <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div><h6 class="mb-1">⚙️ Hitung otomatis dari Downtime SIMRS</h6>
+   <div class="small text-muted">Ambil semua catatan Downtime yang tercatat di menu Downtime, potong otomatis jika melewati batas bulan, lalu hitung waktu tersedia dan persentase ketersediaan.</div>
+  </div>
+  <form method="post" class="m-0" onsubmit="return confirm('Hitung ulang IM-IT-01 dari log Downtime untuk tahun <?=h($year)?>? Data N/D/Capaian tahun ini akan diperbarui.');">
+   <input type="hidden" name="action" value="hitung_ketersediaan_simrs">
+   <input type="hidden" name="indikator_id" value="<?=$detail['id']?>">
+   <input type="hidden" name="tahun" value="<?=$year?>">
+   <button class="btn btn-success">🔄 Hitung dari Downtime</button>
+  </form>
+ </div>
+ <div class="alert alert-warning mt-3 mb-0 small">Gunakan menu <strong>Downtime</strong> hanya untuk kejadian yang memang memengaruhi ketersediaan SIMRS. Contoh: server/aplikasi/database SIMRS tidak dapat digunakan. Jangan memasukkan gangguan lain yang tidak memengaruhi SIMRS.</div>
+</div></div>
+<?php endif; ?>
 
 <div class="card shadow-sm mb-4"><div class="card-body">
  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
