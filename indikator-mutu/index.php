@@ -558,6 +558,8 @@ require __DIR__.'/../partials/header.php';
 </tbody></table></div>
 </div></div>
 
+<?php endif; ?>
+
 <script>
 (function(){
  const canvas=document.getElementById('trendChart');
