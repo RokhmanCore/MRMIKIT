@@ -1,0 +1,1 @@
+<?php require_once __DIR__.'/../config/config.php';require_once __DIR__.'/../config/auth.php';require_login();$page_title='Laporan';require __DIR__.'/../partials/header.php';?><h2>Laporan</h2><div class="alert alert-info">Rekap per EP, status dokumen, review, downtime dan bukti implementasi.</div><?php require __DIR__.'/../partials/footer.php';
