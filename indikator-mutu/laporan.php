@@ -79,6 +79,14 @@ $ep=[];
 $st=$pdo->prepare("SELECT e.kode,e.judul FROM mutu_indikator_ep m JOIN elemen_penilaian e ON e.id=m.ep_id WHERE m.indikator_id=? ORDER BY e.urutan");
 $st->execute([$id]);$ep=$st->fetchAll();
 
+/* Bukti perwakilan IM-IT-03: satu offline dan satu online untuk seluruh tahun laporan. */
+$backupEvidence=[];
+if($i['kode']==='IM-IT-03'){
+    $est=$pdo->prepare("SELECT * FROM mutu_backup_bukti WHERE indikator_id=? AND tahun=? ORDER BY FIELD(jenis,'offline','online')");
+    $est->execute([$id,$year]);
+    $backupEvidence=$est->fetchAll();
+}
+
 /* Susun 12 bulan untuk laporan. */
 $reportMonths=[];$tercapai=0;$tidak=0;$cnt=0;$sum=0;
 for($m=1;$m<=12;$m++){
@@ -169,6 +177,20 @@ $colors=['tercapai'=>'#198754','tidak_tercapai'=>'#dc3545','perlu_perhatian'=>'#
 
 <h2><?=in_array($i['kode'],['IM-IT-01','IM-IT-02'],true)?'6':'5'?>. Bukti Pendukung</h2>
 <table><thead><tr><th>Bulan</th><th>Nama file</th><th>Catatan</th></tr></thead><tbody><?php if($bukti):foreach($bukti as $b):?><tr><td><?=h($monthNames[(int)date('n',strtotime($b['periode']))-1])?></td><td><?=h($b['original_name'])?></td><td><?=h($b['catatan']??'-')?></td></tr><?php endforeach;else:?><tr><td colspan="3">Belum ada bukti yang diunggah pada capaian.</td></tr><?php endif;?></tbody></table>
+
+<?php if($i['kode']==='IM-IT-03'): ?>
+<h2>5. Bukti Perwakilan Backup</h2>
+<div class="small">Bukti ini mewakili mekanisme backup offline dan online untuk tahun <?=h($year)?>. Tidak diperlukan screenshot setiap hari. Rekap harian/bulanan tetap menjadi sumber angka capaian.</div>
+<table><thead><tr><th>Jenis</th><th>File bukti</th><th>Catatan</th></tr></thead><tbody>
+<?php if($backupEvidence): foreach($backupEvidence as $eb): ?>
+<tr><td><strong><?=h(strtoupper($eb['jenis']))?></strong></td><td><?=h($eb['original_name'])?></td><td><?=h($eb['catatan']??'-')?></td></tr>
+<?php endforeach; else: ?><tr><td colspan="3">Belum ada bukti perwakilan offline/online.</td></tr><?php endif; ?></tbody></table>
+<?php foreach($backupEvidence as $eb): $isImage=in_array(strtolower(pathinfo($eb['original_name'],PATHINFO_EXTENSION)),['jpg','jpeg','png'],true); ?>
+<div class="avoid-break" style="margin-top:10px"><strong><?=h(ucfirst($eb['jenis']))?> — <?=h($eb['original_name'])?></strong>
+<?php if($isImage): ?><div style="margin-top:6px"><img src="download_backup_evidence.php?id=<?=$eb['id']?>" alt="<?=h($eb['original_name'])?>" style="max-width:100%;max-height:260mm;border:1px solid #d7dee5;border-radius:5px"></div><?php else: ?><div class="small" style="margin-top:5px">File PDF tersimpan sebagai bukti: <?=h($eb['original_name'])?></div><?php endif; ?>
+<?php if(!empty($eb['catatan'])):?><div class="small" style="margin-top:4px"><?=nl2br(h($eb['catatan']))?></div><?php endif; ?></div>
+<?php endforeach; ?>
+<?php endif; ?>
 
 <h2><?=in_array($i['kode'],['IM-IT-01','IM-IT-02'],true)?'7':'6'?>. Ringkasan</h2>
 <p>Laporan ini mengambil data langsung dari MRMIKIT untuk indikator <strong><?=h($i['kode'])?></strong> tahun <?=h($year)?>. Untuk IM-IT-01 dan IM-IT-02, perhitungan capaian dan rincian kejadian menggunakan tabel <strong>downtime</strong> yang sama sehingga dapat ditelusuri kembali ke sumber kejadian.</p>
