@@ -638,7 +638,7 @@ if($detailId){
 
            $period=sprintf('%04d-%02d-01',$year,$dm);
            $existing=$byMonth[$dm]??[];
-           $daysInMonth=(int)$ds=new DateTime($period);
+           $ds=new DateTime($period);
            $monthEnd=(clone $ds)->modify('+1 month');
            $hours=($monthEnd->getTimestamp()-$ds->getTimestamp())/3600;
            $byMonth[$dm]=array_merge($existing,[
