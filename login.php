@@ -37,12 +37,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <title>Masuk · MRMIKIT</title>
 <style>
 :root{
-    --green:#087f5b;
-    --green-dark:#07563f;
-    --green-soft:#e8f6f0;
-    --ink:#17352c;
-    --muted:#6c817a;
-    --line:#dce9e4;
+    --green:#171717;
+    --green-dark:#090909;
+    --green-soft:#f3f3f3;
+    --red:#c92a3d;
+    --red-dark:#9f1f30;
+    --ink:#171717;
+    --muted:#727272;
+    --line:#dedede;
 }
 *{box-sizing:border-box}
 body{
@@ -51,9 +53,9 @@ body{
     font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Arial,sans-serif;
     color:var(--ink);
     background:
-      radial-gradient(circle at 12% 12%,rgba(40,180,130,.16),transparent 28%),
-      radial-gradient(circle at 88% 88%,rgba(14,120,87,.12),transparent 30%),
-      linear-gradient(135deg,#f7fbf9 0%,#eef7f3 48%,#e7f3ee 100%);
+      radial-gradient(circle at 12% 12%,rgba(201,42,61,.08),transparent 28%),
+      radial-gradient(circle at 88% 88%,rgba(0,0,0,.08),transparent 30%),
+      linear-gradient(135deg,#f7f7f7 0%,#eeeeee 52%,#e6e6e6 100%);
     display:flex;
     align-items:center;
     justify-content:center;
@@ -75,9 +77,9 @@ body{
     padding:48px;
     color:#fff;
     background:
-      radial-gradient(circle at 78% 20%,rgba(255,255,255,.18),transparent 22%),
-      radial-gradient(circle at 15% 90%,rgba(255,255,255,.10),transparent 28%),
-      linear-gradient(145deg,#064d3a,#087f5b 58%,#139b6d);
+      radial-gradient(circle at 78% 20%,rgba(201,42,61,.22),transparent 24%),
+      radial-gradient(circle at 15% 90%,rgba(255,255,255,.06),transparent 28%),
+      linear-gradient(145deg,#090909,#171717 62%,#242424);
     display:flex;
     flex-direction:column;
     justify-content:space-between;
@@ -94,7 +96,7 @@ body{
     width:62px;height:62px;
     display:grid;place-items:center;
     border-radius:18px;
-    background:rgba(255,255,255,.14);
+    background:rgba(201,42,61,.16);
     border:1px solid rgba(255,255,255,.2);
     box-shadow:inset 0 1px rgba(255,255,255,.18);
     font-size:29px;
@@ -110,7 +112,7 @@ body{
 .brand-panel .tagline{
     max-width:330px;
     margin:0;
-    color:rgba(255,255,255,.82);
+    color:rgba(255,255,255,.78);
     font-size:15px;
     line-height:1.7;
 }
@@ -128,7 +130,7 @@ body{
     display:inline-flex;
     align-items:center;
     gap:7px;
-    color:var(--green);
+    color:var(--red);
     font-size:12px;
     font-weight:800;
     letter-spacing:.12em;
@@ -139,7 +141,7 @@ body{
     content:"";
     width:22px;height:3px;
     border-radius:10px;
-    background:var(--green);
+    background:var(--red);
 }
 .form-wrap h2{
     margin:0;
@@ -189,8 +191,8 @@ body{
 }
 .form-control:focus{
     background:#fff;
-    border-color:#48a985;
-    box-shadow:0 0 0 4px rgba(18,155,109,.10);
+    border-color:#c92a3d;
+    box-shadow:0 0 0 4px rgba(201,42,61,.10);
 }
 .btn-login{
     width:100%;
@@ -199,16 +201,16 @@ body{
     border-radius:13px;
     margin-top:4px;
     color:#fff;
-    background:linear-gradient(135deg,#087f5b,#0a9b6b);
+    background:linear-gradient(135deg,#9f1f30,#c92a3d);
     font-size:14px;
     font-weight:800;
     cursor:pointer;
-    box-shadow:0 9px 22px rgba(8,127,91,.22);
+    box-shadow:0 9px 22px rgba(201,42,61,.22);
     transition:.18s ease;
 }
 .btn-login:hover{
     transform:translateY(-1px);
-    box-shadow:0 12px 26px rgba(8,127,91,.28);
+    box-shadow:0 12px 26px rgba(201,42,61,.28);
 }
 .help{
     margin-top:23px;
@@ -237,7 +239,6 @@ body{
 <main class="login-shell">
     <section class="brand-panel">
         <div>
-            <div class="logo-mark">M<span style="font-size:.65em">K</span></div>
             <h1>MRMIKIT</h1>
             <p class="tagline">Sistem manajemen dokumen dan indikator mutu untuk mendukung pengelolaan MRMIK IT dan persiapan akreditasi LARSI.</p>
         </div>
