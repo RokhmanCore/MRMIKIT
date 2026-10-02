@@ -91,18 +91,102 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             if(!$ind) throw new RuntimeException('Indikator tidak ditemukan.');
             if($ind['kode']!=='IM-IT-01') throw new RuntimeException('Fitur ini khusus IM-IT-01 Ketersediaan SIMRS.');
 
-            // Sumber utama heatmap adalah data capaian 12 bulan yang sudah tersimpan.
-            // Jangan hitung ulang dari tabel downtime agar hasil pada tabel 12 bulan
-            // dan heatmap selalu identik.
-            $st=$pdo->prepare("SELECT periode,capaian,numerator,denominator,target_snapshot,status
-                               FROM mutu_capaian
-                               WHERE indikator_id=? AND periode BETWEEN ? AND ?
-                               ORDER BY periode");
-            $st->execute([$indikator_id,sprintf('%04d-01-01',$tahun),sprintf('%04d-12-31',$tahun)]);
-            $rows=$st->fetchAll();
+            // Sumber data IM-IT-01 dan IM-IT-02 sama-sama tabel downtime.
+            // Semua kejadian downtime digabung per bulan. Jika bulan sudah selesai
+            // dan tidak ada downtime, ketersediaan otomatis 100%.
+            $events=$pdo->query("SELECT mulai,selesai FROM downtime WHERE selesai IS NOT NULL AND selesai>mulai ORDER BY mulai")->fetchAll();
 
-            $hasil=count($rows);
-            $msg="IM-IT-01 disinkronkan dengan tabel Capaian 12 Bulan. {$hasil} bulan tersedia. Heatmap menggunakan data yang sama; tidak ada perhitungan ulang dari Downtime.";
+            $oldSt=$pdo->prepare("SELECT analisis,tindak_lanjut,target_snapshot FROM mutu_capaian WHERE indikator_id=? AND periode=?");
+            $up=$pdo->prepare("INSERT INTO mutu_capaian
+                (indikator_id,periode,numerator,denominator,capaian,target_snapshot,analisis,tindak_lanjut,status,created_by)
+                VALUES (?,?,?,?,?,?,?,?,?,?)
+                ON DUPLICATE KEY UPDATE numerator=VALUES(numerator),denominator=VALUES(denominator),
+                capaian=VALUES(capaian),target_snapshot=VALUES(target_snapshot),
+                analisis=VALUES(analisis),tindak_lanjut=VALUES(tindak_lanjut),
+                status=VALUES(status),updated_at=CURRENT_TIMESTAMP");
+
+            $hasil=0;
+            $nowYear=(int)date('Y');
+            $nowMonth=(int)date('n');
+
+            for($bulan=1;$bulan<=12;$bulan++){
+                $start=new DateTime(sprintf('%04d-%02d-01 00:00:00',$tahun,$bulan));
+                $end=(clone $start)->modify('+1 month');
+                $periode=$start->format('Y-m-d');
+
+                // Bulan yang sudah selesai boleh otomatis dinilai.
+                // Bulan berjalan dan bulan masa depan tanpa data tetap kosong.
+                $isPastMonth=($tahun<$nowYear) || ($tahun===$nowYear && $bulan<$nowMonth);
+
+                $intervals=[];
+                foreach($events as $ev){
+                    $ds=new DateTime($ev['mulai']);
+                    $de=new DateTime($ev['selesai']);
+                    $cs=$ds>$start?$ds:$start;
+                    $ce=$de<$end?$de:$end;
+                    if($ce>$cs) $intervals[]=[$cs->getTimestamp(),$ce->getTimestamp()];
+                }
+
+                usort($intervals,fn($x,$y)=>$x[0]<=>$y[0]);
+                $merged=[];
+                foreach($intervals as $iv){
+                    if(!$merged || $iv[0]>$merged[count($merged)-1][1]){
+                        $merged[]=$iv;
+                    }else{
+                        $merged[count($merged)-1][1]=max($merged[count($merged)-1][1],$iv[1]);
+                    }
+                }
+
+                // Simpan analisis/RTL yang sudah dibuat pengguna agar sinkronisasi
+                // tidak menghapus catatan akreditasi.
+                $oldSt->execute([$indikator_id,$periode]);
+                $old=$oldSt->fetch();
+
+                $target=$ind['target']!==null?(float)$ind['target']:($old['target_snapshot']??null);
+
+                if(!$merged){
+                    if(!$isPastMonth) continue;
+
+                    // Tidak ada downtime pada bulan yang sudah selesai:
+                    // N = D = total jam kalender, capaian = 100%.
+                    $totalHours=($end->getTimestamp()-$start->getTimestamp())/3600;
+                    $cap=100.0;
+                    $status=$target===null?'belum_dinilai':($cap >= $target?'tercapai':'tidak_tercapai');
+
+                    $up->execute([
+                        $indikator_id,$periode,
+                        round($totalHours,4),round($totalHours,4),
+                        $cap,$target,
+                        $old['analisis']??'Tidak ditemukan kejadian downtime pada bulan ini. Ketersediaan SIMRS 100%.',
+                        $old['tindak_lanjut']??'Tidak ada tindak lanjut karena tidak terdapat downtime.',
+                        $status,$_SESSION['user']['id']??null
+                    ]);
+                    $hasil++;
+                    continue;
+                }
+
+                $downSeconds=0;
+                foreach($merged as $iv) $downSeconds += $iv[1]-$iv[0];
+
+                $totalSeconds=$end->getTimestamp()-$start->getTimestamp();
+                $totalHours=$totalSeconds/3600;
+                $downHours=$downSeconds/3600;
+                $availableHours=max(0,$totalHours-$downHours);
+                $cap=$totalHours>0?($availableHours/$totalHours)*100:0;
+                $status=$target===null?'belum_dinilai':($cap >= $target?'tercapai':'tidak_tercapai');
+
+                $up->execute([
+                    $indikator_id,$periode,
+                    round($availableHours,4),round($totalHours,4),
+                    round($cap,4),$target,
+                    $old['analisis']??'',
+                    $old['tindak_lanjut']??'',
+                    $status,$_SESSION['user']['id']??null
+                ]);
+                $hasil++;
+            }
+
+            $msg="IM-IT-01 otomatis disinkronkan dari tabel Downtime yang sama dengan IM-IT-02. Bulan selesai tanpa downtime menjadi 100%; bulan dengan downtime dihitung dari seluruh kejadian; bulan berjalan/masa depan tanpa data tetap Belum Ada Data.";
         }
 
         if ($action==='hitung_ketersediaan_simrs') {
@@ -628,19 +712,19 @@ require __DIR__.'/../partials/header.php';
 <div class="card border-success shadow-sm mb-4"><div class="card-body">
  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div><h6 class="mb-1">⚙️ Hitung otomatis dari Downtime SIMRS</h6>
-   <div class="small text-muted">Heatmap mengambil langsung data yang sudah tersimpan pada tabel <strong>Capaian 12 Bulan</strong>. Data pada tabel tersebut dapat berasal dari pencatatan downtime dan kondisi bulan yang Anda pilih.</div>
+   <div class="small text-muted">IM-IT-01 membaca <strong>tabel Downtime</strong> yang sama dengan IM-IT-02. Semua kejadian dalam bulan dijumlahkan otomatis; bulan selesai tanpa downtime menjadi <strong>100%</strong>.</div>
   </div>
 <div class="d-flex gap-2 flex-wrap">
    <a class="btn btn-outline-success" href="../downtime/tambah.php">➕ Catat Downtime</a>
-   <form method="post" class="m-0" onsubmit="return confirm('Sinkronkan Heatmap IM-IT-01 dengan data Capaian 12 Bulan tahun <?=h($year)?>?');">
+   <form method="post" class="m-0" onsubmit="return confirm('Ambil data IM-IT-01 langsung dari tabel Downtime untuk tahun <?=h($year)?>? Data capaian bulan selesai akan disesuaikan otomatis.');">
     <input type="hidden" name="action" value="sinkronkan_im_it_01">
     <input type="hidden" name="indikator_id" value="<?=$detail['id']?>">
     <input type="hidden" name="tahun" value="<?=$year?>">
-    <button class="btn btn-success">🔄 Sinkronkan Data 12 Bulan</button>
+    <button class="btn btn-success">🔄 Ambil dari Downtime</button>
    </form>
   </div>
  </div>
- <div class="alert alert-warning mt-3 mb-0 small"><strong>Sumber Heatmap:</strong> data IM-IT-01 pada Heatmap diambil dari <strong>Capaian 12 Bulan</strong> yang sudah tersimpan. Jadi angka dan status Heatmap akan sama persis dengan tabel di bawah, tanpa menghitung ulang atau mengganti data yang sudah Anda isi.</div>
+ <div class="alert alert-warning mt-3 mb-0 small"><strong>Sumber data:</strong> IM-IT-01 dan IM-IT-02 sama-sama mengambil kejadian dari tabel <strong>downtime</strong>. September, misalnya, jika tidak ada kejadian downtime dan bulannya sudah selesai, otomatis menjadi <strong>0 menit downtime</strong> pada IM-IT-02 dan <strong>100% ketersediaan</strong> pada IM-IT-01.</div>
 </div></div>
 <?php endif; ?>
 
