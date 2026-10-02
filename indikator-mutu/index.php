@@ -557,7 +557,6 @@ require __DIR__.'/../partials/header.php';
 </td></tr><?php endforeach;?>
 </tbody></table></div>
 </div></div>
-<?php endif;?>
 
 <script>
 (function(){
