@@ -443,9 +443,21 @@ require __DIR__.'/../partials/header.php';
  <h6 class="mb-3">Heatmap capaian <?=h($year)?></h6>
  <div class="table-responsive"><div class="heatmap">
   <div class="hm-head text-start">Indikator</div><?php foreach(['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'] as $mn):?><div class="hm-head"><?=$mn?></div><?php endforeach;?>
-  <?php foreach($indikators as $ii):?><div class="hm-name"><?=h($ii['kode'])?><br><span class="small text-muted"><?=h($ii['nama'])?></span></div><?php for($mm=1;$mm<=12;$mm++):$hm=$heatmapData[(int)$ii['id']][$mm]??null;$hs=$hm['status']??'';$hc=$hs==='tercapai'?'hm-ok':($hs==='tidak_tercapai'?'hm-bad':($hs==='perlu_perhatian'?'hm-warn':'hm-empty'));?><div class="<?=$hc?>" title="<?=$hm&&$hm['capaian']!==null?h(round((float)$hm['capaian'],2).' '.$ii['satuan']):'Belum diinput'?>"><?=$hm&&$hm['capaian']!==null?h(round((float)$hm['capaian'],1)): '—'?></div><?php endfor;endforeach;?>
+  <?php foreach($indikators as $ii):?><div class="hm-name"><?=h($ii['kode'])?><br><span class="small text-muted"><?=h($ii['nama'])?></span></div><?php for($mm=1;$mm<=12;$mm++):$hm=$heatmapData[(int)$ii['id']][$mm]??null;$hs=$hm['status']??'';$hc=$hs==='tercapai'?'hm-ok':($hs==='tidak_tercapai'?'hm-bad':($hs==='perlu_perhatian'?'hm-warn':'hm-empty'));?><div class="<?=$hc?>" title="<?php
+      if(($ii['kode']??'')==='IM-IT-02' && $hm && $hm['capaian']!==null){
+          echo h(round((float)$hm['capaian'],2).' menit downtime');
+      } else {
+          echo $hm&&$hm['capaian']!==null ? h(round((float)$hm['capaian'],2).' '.($ii['satuan']??'')) : 'Belum diverifikasi / belum ada data';
+      }
+    ?>"><?php
+      if(($ii['kode']??'')==='IM-IT-02'){
+          echo $hm&&$hm['capaian']!==null ? h(round((float)$hm['capaian'],1)) : '—';
+      } else {
+          echo $hm&&$hm['capaian']!==null ? h(round((float)$hm['capaian'],1)) : '—';
+      }
+    ?></div><?php endfor;endforeach;?>
  </div></div>
- <div class="small text-muted mt-2">🟢 tercapai · 🟡 perlu perhatian · 🔴 tidak tercapai · ⚪ belum ada capaian.</div>
+ <div class="small text-muted mt-2">🟢 tercapai / 0 menit untuk IM-IT-02 · 🟡 perlu perhatian · 🔴 tidak tercapai / ada downtime · ⚪ belum ada data.</div>
 </div></div>
 
 <div class="card shadow-sm mutu-card mb-4"><div class="card-body">
