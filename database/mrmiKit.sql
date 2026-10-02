@@ -165,3 +165,35 @@ ALTER TABLE downtime ADD COLUMN IF NOT EXISTS bukti_filename VARCHAR(255) NULL A
 ALTER TABLE downtime ADD COLUMN IF NOT EXISTS bukti_original_name VARCHAR(255) NULL AFTER bukti_filename;
 ALTER TABLE downtime ADD COLUMN IF NOT EXISTS bukti_mime VARCHAR(150) NULL AFTER bukti_original_name;
 ALTER TABLE downtime ADD COLUMN IF NOT EXISTS bukti_size BIGINT NOT NULL DEFAULT 0 AFTER bukti_mime;
+
+CREATE TABLE IF NOT EXISTS mutu_backup_harian (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    indikator_id INT NOT NULL,
+    periode DATE NOT NULL,
+    dijadwalkan INT NOT NULL DEFAULT 0,
+    berhasil INT NOT NULL DEFAULT 0,
+    gagal INT NOT NULL DEFAULT 0,
+    catatan TEXT NULL,
+    created_by INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_backup_periode (indikator_id,periode),
+    FOREIGN KEY (indikator_id) REFERENCES mutu_indikator(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS mutu_backup_bukti (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    indikator_id INT NOT NULL,
+    tahun YEAR NOT NULL,
+    jenis ENUM('offline','online') NOT NULL,
+    nama_file VARCHAR(255) NOT NULL,
+    original_name VARCHAR(255) NOT NULL,
+    mime_type VARCHAR(120) NULL,
+    size_bytes BIGINT NOT NULL DEFAULT 0,
+    catatan TEXT NULL,
+    uploaded_by INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_backup_bukti (indikator_id,tahun,jenis),
+    INDEX idx_backup_bukti_indikator (indikator_id,tahun),
+    FOREIGN KEY (indikator_id) REFERENCES mutu_indikator(id) ON DELETE CASCADE
+);
