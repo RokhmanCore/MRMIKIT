@@ -179,7 +179,7 @@ $colors=['tercapai'=>'#198754','tidak_tercapai'=>'#dc3545','perlu_perhatian'=>'#
 <table><thead><tr><th>Bulan</th><th>Nama file</th><th>Catatan</th></tr></thead><tbody><?php if($bukti):foreach($bukti as $b):?><tr><td><?=h($monthNames[(int)date('n',strtotime($b['periode']))-1])?></td><td><?=h($b['original_name'])?></td><td><?=h($b['catatan']??'-')?></td></tr><?php endforeach;else:?><tr><td colspan="3">Belum ada bukti yang diunggah pada capaian.</td></tr><?php endif;?></tbody></table>
 
 <?php if($i['kode']==='IM-IT-03'): ?>
-<h2>5. Bukti Perwakilan Backup</h2>
+<h2>6. Bukti Perwakilan Backup</h2>
 <div class="small">Bukti ini mewakili mekanisme backup offline dan online untuk tahun <?=h($year)?>. Tidak diperlukan screenshot setiap hari. Rekap harian/bulanan tetap menjadi sumber angka capaian.</div>
 <table><thead><tr><th>Jenis</th><th>File bukti</th><th>Catatan</th></tr></thead><tbody>
 <?php if($backupEvidence): foreach($backupEvidence as $eb): ?>
@@ -192,7 +192,7 @@ $colors=['tercapai'=>'#198754','tidak_tercapai'=>'#dc3545','perlu_perhatian'=>'#
 <?php endforeach; ?>
 <?php endif; ?>
 
-<h2><?=in_array($i['kode'],['IM-IT-01','IM-IT-02'],true)?'7':'6'?>. Ringkasan</h2>
+<h2><?=in_array($i['kode'],['IM-IT-01','IM-IT-02'],true)||$i['kode']==='IM-IT-03'?'7':'6'?>. Ringkasan</h2>
 <p>Laporan ini mengambil data langsung dari MRMIKIT untuk indikator <strong><?=h($i['kode'])?></strong> tahun <?=h($year)?>. Untuk IM-IT-01 dan IM-IT-02, perhitungan capaian dan rincian kejadian menggunakan tabel <strong>downtime</strong> yang sama sehingga dapat ditelusuri kembali ke sumber kejadian.</p>
 <div class="footer">Dicetak dari MRMIKIT · <?=date('d-m-Y H:i')?> · Laporan Indikator Mutu IT</div>
 </body></html>
