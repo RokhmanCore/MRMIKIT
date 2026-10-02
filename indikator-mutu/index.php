@@ -452,6 +452,60 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             $msg=$tersimpan>0 ? "Capaian {$tersimpan} bulan berhasil disimpan." : 'Tidak ada perubahan yang diisi.';
         }
 
+        if ($action==='save_backup_bulanan') {
+            $indikator_id=(int)($_POST['indikator_id']??0);
+            $tahun=(int)($_POST['tahun']??date('Y'));
+            if($indikator_id<1 || $tahun<2020 || $tahun>2100) throw new RuntimeException('Indikator atau tahun tidak valid.');
+            $st=$pdo->prepare("SELECT * FROM mutu_indikator WHERE id=?");
+            $st->execute([$indikator_id]); $ind=$st->fetch();
+            if(!$ind || $ind['kode']!=='IM-IT-03') throw new RuntimeException('Fitur ini khusus IM-IT-03 Keberhasilan backup data.');
+            $pdo->exec("CREATE TABLE IF NOT EXISTS mutu_backup_harian (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                indikator_id INT NOT NULL,
+                periode DATE NOT NULL,
+                dijadwalkan INT NOT NULL DEFAULT 0,
+                berhasil INT NOT NULL DEFAULT 0,
+                gagal INT NOT NULL DEFAULT 0,
+                catatan TEXT NULL,
+                created_by INT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_backup_periode (indikator_id,periode),
+                FOREIGN KEY (indikator_id) REFERENCES mutu_indikator(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            $items=$_POST['backup']??[]; $saved=0;
+            $sql=$pdo->prepare("INSERT INTO mutu_backup_harian(indikator_id,periode,dijadwalkan,berhasil,gagal,catatan,created_by)
+                VALUES(?,?,?,?,?,?,?)
+                ON DUPLICATE KEY UPDATE dijadwalkan=VALUES(dijadwalkan),berhasil=VALUES(berhasil),gagal=VALUES(gagal),
+                catatan=VALUES(catatan),updated_at=CURRENT_TIMESTAMP");
+            $capSql=$pdo->prepare("INSERT INTO mutu_capaian
+                (indikator_id,periode,numerator,denominator,capaian,target_snapshot,analisis,tindak_lanjut,status,created_by)
+                VALUES(?,?,?,?,?,?,?,?,?,?)
+                ON DUPLICATE KEY UPDATE numerator=VALUES(numerator),denominator=VALUES(denominator),capaian=VALUES(capaian),
+                target_snapshot=VALUES(target_snapshot),status=VALUES(status),updated_at=CURRENT_TIMESTAMP");
+            for($bulan=1;$bulan<=12;$bulan++){
+                $r=is_array($items[$bulan]??null)?$items[$bulan]:[];
+                $scheduled=max(0,(int)($r['dijadwalkan']??0));
+                $success=max(0,(int)($r['berhasil']??0));
+                $failed=max(0,(int)($r['gagal']??0));
+                $note=trim((string)($r['catatan']??''));
+                if($scheduled===0 && $success===0 && $failed===0 && $note==='') continue;
+                if($success>$scheduled) throw new RuntimeException("Backup berhasil bulan {$bulan} tidak boleh melebihi jumlah jadwal.");
+                if($failed>$scheduled) throw new RuntimeException("Backup gagal bulan {$bulan} tidak boleh melebihi jumlah jadwal.");
+                if(($success+$failed)>$scheduled) throw new RuntimeException("Berhasil + gagal bulan {$bulan} melebihi jumlah backup yang dijadwalkan.");
+                $periode=sprintf('%04d-%02d-01',$tahun,$bulan);
+                $sql->execute([$indikator_id,$periode,$scheduled,$success,$failed,$note,$_SESSION['user']['id']??null]);
+                $target=$ind['target']!==null?(float)$ind['target']:null;
+                $cap=$scheduled>0?($success/$scheduled)*100:null;
+                $status=$cap===null?'belum_dinilai':($target===null?'belum_dinilai':($cap>=$target?'tercapai':'tidak_tercapai'));
+                $analisis=$failed>0 ? "Terdapat {$failed} backup gagal dari {$scheduled} jadwal.": "Backup berjalan sesuai catatan yang diinput.";
+                $rtl=$failed>0 ? "Telusuri log Task Scheduler dan lakukan backup ulang/penanganan kegagalan.": "Tidak ada tindak lanjut khusus.";
+                $capSql->execute([$indikator_id,$periode,$success,$scheduled,$cap,$target,$analisis,$rtl,$status,$_SESSION['user']['id']??null]);
+                $saved++;
+            }
+            $msg="Data backup {$saved} bulan berhasil disimpan. Struktur sudah disiapkan untuk sumber otomatis dari Task Scheduler.";
+        }
+
         if ($action==='upload_bukti') {
             $capaian_id=(int)($_POST['capaian_id']??0);
             if (!$capaian_id || empty($_FILES['bukti_file']) || $_FILES['bukti_file']['error']!==UPLOAD_ERR_OK) {
@@ -621,6 +675,13 @@ if($detailId){
    $st->execute([$detailId]);$rows=$st->fetchAll();
    $byMonth=[];
    foreach($rows as $rr){ $bulan=(int)date('n',strtotime($rr['periode'])); if((int)date('Y',strtotime($rr['periode']))===$year) $byMonth[$bulan]=$rr; }
+
+   $backupByMonth=[];
+   if($detail['kode']==='IM-IT-03'){
+       $bst=$pdo->prepare("SELECT * FROM mutu_backup_harian WHERE indikator_id=? AND YEAR(periode)=? ORDER BY periode");
+       $bst->execute([$detailId,$year]);
+       foreach($bst as $br) $backupByMonth[(int)date('n',strtotime($br['periode']))]=$br;
+   }
 
    if(in_array($detail['kode'],['IM-IT-01','IM-IT-02'],true)){
        for($dm=1;$dm<=12;$dm++){
@@ -857,6 +918,49 @@ require __DIR__.'/../partials/header.php';
 </div></div>
 <?php endif; ?>
 
+<?php if(($detail['kode']??'')==='IM-IT-03'): ?>
+<div class="card border-success shadow-sm mb-4"><div class="card-body">
+ <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div><h5 class="mb-1">💾 Rekap Backup Harian SIMRS</h5>
+   <div class="small text-muted">Tahap 1: input rekap langsung di MRMIKIT. Sumber bukti: Windows Task Scheduler 03.00, log task, dan file backup. Struktur tabel sudah disiapkan agar tahap berikutnya dapat membaca data otomatis.</div>
+  </div>
+  <span class="badge bg-success">IM-IT-03</span>
+ </div>
+ <form method="post" id="formBackup12">
+  <input type="hidden" name="action" value="save_backup_bulanan">
+  <input type="hidden" name="indikator_id" value="<?=$detail['id']?>">
+  <input type="hidden" name="tahun" value="<?=$year?>">
+  <div class="table-responsive mt-3">
+   <table class="table table-bordered table-sm align-middle monthly-input-table">
+    <thead><tr><th>Bulan</th><th>Jadwal</th><th>Berhasil</th><th>Gagal</th><th>Capaian</th><th>Status</th><th>Catatan / bukti</th></tr></thead>
+    <tbody>
+    <?php for($bm=1;$bm<=12;$bm++):
+      $br=$backupByMonth[$bm]??null;
+      $days=(int)cal_days_in_month(CAL_GREGORIAN,$bm,$year);
+      $bd=(int)($br['dijadwalkan']??$days);
+      $bs=(int)($br['berhasil']??0); $bf=(int)($br['gagal']??0);
+      $bc=$bd>0?round($bs/$bd*100,2):null;
+      $bst=$bc===null?'belum_dinilai':($detail['target']===null?'belum_dinilai':($bc>=(float)$detail['target']?'tercapai':'tidak_tercapai'));
+    ?>
+    <tr>
+      <td><strong><?=h($monthNames[$bm-1])?></strong></td>
+      <td><input type="number" min="0" name="backup[<?=$bm?>][dijadwalkan]" value="<?=$bd?>" class="form-control form-control-sm backup-scheduled"></td>
+      <td><input type="number" min="0" name="backup[<?=$bm?>][berhasil]" value="<?=$bs?>" class="form-control form-control-sm backup-success"></td>
+      <td><input type="number" min="0" name="backup[<?=$bm?>][gagal]" value="<?=$bf?>" class="form-control form-control-sm backup-failed"></td>
+      <td class="backup-cap text-center fw-bold"><?= $bc!==null?h($bc.' %'):'—' ?></td>
+      <td class="backup-status text-center"><span class="status-pill <?=($bst==='tercapai'?'status-tercapai':($bst==='tidak_tercapai'?'status-tidak':'status-belum'))?>"><?=h(strtoupper(str_replace('_',' ',$bst)))?></span></td>
+      <td><input type="text" name="backup[<?=$bm?>][catatan]" value="<?=h($br['catatan']??'')?>" class="form-control form-control-sm" placeholder="Contoh: Task Scheduler berhasil; file backup tersedia"></td>
+    </tr>
+    <?php endfor; ?>
+    </tbody>
+   </table>
+  </div>
+  <div class="alert alert-info small mb-3"><strong>Contoh:</strong> jika Januari dijadwalkan 31 kali, berhasil 31, gagal 0 → capaian 100%. Jangan mengisi berhasil 100% tanpa memeriksa bukti backup.</div>
+  <button class="btn btn-success">💾 Simpan Rekap Backup</button>
+ </form>
+</div></div>
+<?php endif; ?>
+
 <div class="card shadow-sm mb-4"><div class="card-body">
  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div><h6 class="mb-1">Input Capaian 12 Bulan <?=h($year)?></h6><div class="small text-muted">Untuk IM-IT-01 pilih kondisi setiap bulan: <strong>Ada Downtime</strong>, <strong>Tidak Ada Downtime</strong>, atau <strong>Belum Ada Data</strong>. N/D dan capaian dihitung otomatis.</div></div>
@@ -1056,6 +1160,20 @@ require __DIR__.'/../partials/header.php';
  }
  draw(); window.addEventListener('resize',draw);
 })();;
+document.querySelectorAll('#formBackup12 tr').forEach(function(row){
+ const s=row.querySelector('.backup-scheduled'),ok=row.querySelector('.backup-success'),bad=row.querySelector('.backup-failed'),cap=row.querySelector('.backup-cap'),st=row.querySelector('.backup-status');
+ if(!s||!ok||!bad||!cap||!st)return;
+ function calc(){
+   const d=Number(s.value||0),v=Number(ok.value||0),f=Number(bad.value||0);
+   const c=d>0?(v/d*100):null;
+   cap.textContent=c===null?'—':c.toFixed(2)+' %';
+   const target=<?=json_encode($detail['target']!==null?(float)$detail['target']:null)?>;
+   let status='BELUM DINILAI', cls='status-belum';
+   if(c!==null && target!==null){status=c>=target?'TERCAPAI':'TIDAK TERCAPAI';cls=c>=target?'status-tercapai':'status-tidak';}
+   st.innerHTML='<span class="status-pill '+cls+'">'+status+'</span>';
+ }
+ [s,ok,bad].forEach(x=>x.addEventListener('input',calc)); calc();
+});
 document.querySelectorAll('#formCapaian12 tr').forEach(function(row){
  const n=row.querySelector('.month-num'),d=row.querySelector('.month-den'),cap=row.querySelector('.month-cap');if(!n||!d||!cap)return;
  function calc(){if(n.value!==''&&d.value!==''&&Number(d.value)!==0)cap.value=(Number(n.value)/Number(d.value)*100).toFixed(4);}
