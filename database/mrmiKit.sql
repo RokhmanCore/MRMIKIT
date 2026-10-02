@@ -127,6 +127,22 @@ INSERT IGNORE INTO mutu_indikator_ep(indikator_id,ep_id)
 SELECT i.id,e.id FROM mutu_indikator i JOIN elemen_penilaian e ON e.kode='MRMIK 13.c' WHERE i.kode='IM-IT-08';
 
 
+/* Rekap Backup SIMRS - Tahap 1 manual, siap dikembangkan ke sumber otomatis Task Scheduler */
+CREATE TABLE IF NOT EXISTS mutu_backup_harian (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    indikator_id INT NOT NULL,
+    periode DATE NOT NULL,
+    dijadwalkan INT NOT NULL DEFAULT 0,
+    berhasil INT NOT NULL DEFAULT 0,
+    gagal INT NOT NULL DEFAULT 0,
+    catatan TEXT NULL,
+    created_by INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_backup_periode (indikator_id, periode),
+    FOREIGN KEY (indikator_id) REFERENCES mutu_indikator(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS mutu_bukti (
     id INT AUTO_INCREMENT PRIMARY KEY,
     capaian_id INT NOT NULL,
