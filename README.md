@@ -20,3 +20,31 @@ Akun awal setelah import SQL:
 - Password: admin123
 
 Segera ganti password setelah login.
+
+
+## Indikator Mutu IT
+
+Modul **Indikator Mutu IT** tersedia di `/indikator-mutu/` dan mencakup:
+- register indikator dan target internal RS
+- numerator/denominator dan perhitungan capaian
+- input capaian per bulan
+- analisis dan tindak lanjut
+- PIC
+- pemetaan indikator ke EP MRMIK
+- status tercapai/tidak tercapai
+
+### Instalasi database untuk instalasi yang sudah berjalan
+
+Jalankan file:
+
+`database/migrasi_indikator_mutu.sql`
+
+melalui phpMyAdmin pada database `mrmiKit`.
+
+Setelah itu buka:
+
+`http://localhost/MRMIKIT/indikator-mutu/`
+
+### Catatan akreditasi
+
+Indikator yang disediakan sebagai awal adalah **template indikator internal IT**, bukan klaim bahwa target/angka tersebut merupakan indikator nasional. RS perlu menetapkan definisi operasional, target, metode pengukuran, PIC, periode, analisis, dan tindak lanjut sesuai kebijakan serta regulasi yang berlaku.
