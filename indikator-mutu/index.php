@@ -674,7 +674,7 @@ require __DIR__.'/../partials/header.php';
 .heatmap>div{padding:7px 5px;text-align:center;font-size:12px;border-radius:5px}
 .hm-head{font-weight:700;background:#f1f3f5}.hm-name{text-align:left!important;font-weight:600;background:#f8f9fa}
 .hm-ok{background:#198754;color:#fff}.hm-bad{background:#dc3545;color:#fff}.hm-warn{background:#ffc107;color:#212529}.hm-empty{background:#e9ecef;color:#6c757d}
-.chart-wrap{position:relative;height:310px}.monthly-input-table{min-width:1100px}.monthly-input-table th{white-space:nowrap}.monthly-input-table input{min-width:95px}.monthly-input-table td:nth-child(7),.monthly-input-table td:nth-child(8){min-width:180px}.profile-label{font-size:12px;color:#6c757d;text-transform:uppercase;font-weight:700}.profile-value{font-weight:600}
+.chart-wrap{position:relative;height:310px}.trend-chart-lg{height:430px}.trend-card{border-radius:18px;background:linear-gradient(135deg,#ffffff 0%,#f4fbf7 100%);box-shadow:0 8px 24px rgba(17,63,52,.08)}.trend-summary{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:#eef8f2}.trend-dot{width:10px;height:10px;border-radius:50%;background:#198754;display:inline-block}.legend-chip{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:600}.legend-green{background:#e8f5ee;color:#198754}.legend-red{background:#fdebed;color:#dc3545}.legend-gray{background:#eef1f3;color:#6c757d}.legend-target{background:#fff3cd;color:#9a6b00}.monthly-input-table{min-width:1100px}.monthly-input-table th{white-space:nowrap}.monthly-input-table input{min-width:95px}.monthly-input-table td:nth-child(7),.monthly-input-table td:nth-child(8){min-width:180px}.profile-label{font-size:12px;color:#6c757d;text-transform:uppercase;font-weight:700}.profile-value{font-weight:600}
 @media(max-width:900px){.heatmap{overflow-x:auto;grid-template-columns:180px repeat(12,45px);min-width:760px}}
 
 </style>
@@ -786,10 +786,28 @@ require __DIR__.'/../partials/header.php';
   <div class="col-md-6"><div class="profile-label">Denominator</div><div><?=h($detail['denominator_label']??'-')?></div></div>
  </div>
 </div></div>
-<div class="card shadow-sm mb-4"><div class="card-body">
- <div class="d-flex justify-content-between align-items-center"><h6 class="mb-0">Grafik tren 12 bulan <?=h($year)?></h6><span class="small text-muted">Garis target = <?=h($detail['target']??'-')?> <?=h($detail['satuan'])?></span></div>
- <div class="chart-wrap mt-2"><canvas id="trendChart" aria-label="Grafik tren capaian 12 bulan"></canvas></div>
-</div></div>
+<div class="card shadow-sm mb-4 border-0 trend-card">
+ <div class="card-body p-4">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+   <div>
+    <div class="small text-uppercase fw-bold text-success">Analisis capaian</div>
+    <h4 class="mb-1 fw-bold">Trend <?=h($detail['nama'])?> — <?=h($year)?></h4>
+    <div class="text-muted small">Perkembangan capaian Januari–Desember. Garis putus-putus menunjukkan target indikator.</div>
+   </div>
+   <div class="trend-summary">
+    <span class="trend-dot"></span>
+    <span class="small fw-semibold"><?=h($detail['satuan'])?></span>
+   </div>
+  </div>
+  <div class="trend-legend mt-3 d-flex flex-wrap gap-2">
+    <span class="legend-chip legend-green">● Tercapai</span>
+    <span class="legend-chip legend-red">● Tidak tercapai</span>
+    <span class="legend-chip legend-gray">● Belum ada data</span>
+    <span class="legend-chip legend-target">━━ Target</span>
+  </div>
+  <div class="chart-wrap trend-chart-lg mt-3"><canvas id="trendChart" aria-label="Grafik tren 12 bulan"></canvas></div>
+ </div>
+</div>
 
 <?php if(($detail['kode']??'')==='IM-IT-02'): ?>
 <div class="card border-success shadow-sm mb-4"><div class="card-body">
@@ -934,24 +952,105 @@ require __DIR__.'/../partials/header.php';
  const labels=<?=json_encode($monthNames,JSON_UNESCAPED_UNICODE)?>;
  const data=<?=json_encode(array_map(function($m)use($byMonth){$r=$byMonth[$m]??null;return $r&&$r['capaian']!==null?(float)$r['capaian']:null;},range(1,12)))?>;
  const target=<?=json_encode($detail['target']!==null?(float)$detail['target']:null)?>;
+ const statuses=<?=json_encode(array_map(function($m)use($byMonth){$r=$byMonth[$m]??null;return $r['status']??null;},range(1,12)))?>;
  const dpr=window.devicePixelRatio||1;
+ const palette=['#198754','#0d6efd','#fd7e14','#6f42c1','#d63384','#20c997','#0dcaf0','#ffc107','#dc3545','#6c757d','#6610f2','#198754'];
+
  function draw(){
-   const w=canvas.clientWidth||900,h=canvas.clientHeight||310;
-   canvas.width=w*dpr;canvas.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
-   const pad={l:48,r:18,t:22,b:42},pw=w-pad.l-pad.r,ph=h-pad.t-pad.b,vals=data.filter(v=>v!==null);
-   if(!vals.length){ctx.font='14px Arial';ctx.fillStyle='#6c757d';ctx.fillText('Belum ada capaian untuk tahun ini.',pad.l,pad.t+30);return;}
-   let min=Math.min(...vals,target??Infinity),max=Math.max(...vals,target??-Infinity);if(!Number.isFinite(min))min=0;if(!Number.isFinite(max))max=100;
-   const rg=Math.max(max-min,1);min-=rg*.12;max+=rg*.12;const x=i=>pad.l+(pw*i/11),y=v=>pad.t+(max-v)*ph/(max-min);
-   ctx.strokeStyle='#e9ecef';ctx.lineWidth=1;
-   for(let g=0;g<=4;g++){const yy=pad.t+ph*g/4;ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(w-pad.r,yy);ctx.stroke();ctx.fillStyle='#6c757d';ctx.font='11px Arial';ctx.fillText((max-(max-min)*g/4).toFixed(1),5,yy+4);}
-   if(target!==null){ctx.strokeStyle='#dc3545';ctx.setLineDash([6,5]);ctx.beginPath();ctx.moveTo(pad.l,y(target));ctx.lineTo(w-pad.r,y(target));ctx.stroke();ctx.setLineDash([]);}
-   ctx.strokeStyle='#198754';ctx.lineWidth=3;ctx.beginPath();let started=false;
-   data.forEach((v,i)=>{if(v===null){started=false;return;}const xx=x(i),yy=y(v);if(!started){ctx.moveTo(xx,yy);started=true;}else ctx.lineTo(xx,yy);});ctx.stroke();
-   data.forEach((v,i)=>{if(v===null)return;const xx=x(i),yy=y(v);ctx.fillStyle='#198754';ctx.beginPath();ctx.arc(xx,yy,4,0,Math.PI*2);ctx.fill();ctx.fillStyle='#212529';ctx.font='11px Arial';ctx.textAlign='center';ctx.fillText(v.toFixed(2)+'%',xx,yy-9);});
-   ctx.fillStyle='#495057';ctx.font='11px Arial';labels.forEach((lab,i)=>{ctx.textAlign='center';ctx.fillText(lab.slice(0,3),x(i),h-15);});
+   const w=Math.max(canvas.clientWidth||980,760), h=Math.max(canvas.clientHeight||430,430);
+   canvas.width=w*dpr; canvas.height=h*dpr;
+   ctx.setTransform(dpr,0,0,dpr,0,0);
+   ctx.clearRect(0,0,w,h);
+
+   const pad={l:62,r:26,t:34,b:58}, pw=w-pad.l-pad.r, ph=h-pad.t-pad.b;
+   const vals=data.filter(v=>v!==null);
+   if(!vals.length){
+     ctx.fillStyle='#6c757d';ctx.font='15px Arial';ctx.fillText('Belum ada capaian untuk tahun ini.',pad.l,pad.t+30);return;
+   }
+
+   let min=Math.min(...vals,target??Infinity), max=Math.max(...vals,target??-Infinity);
+   if(!Number.isFinite(min)) min=0;
+   if(!Number.isFinite(max)) max=100;
+   let range=Math.max(max-min,1);
+   if((max-min)<2){const mid=(max+min)/2;min=mid-1.2;max=mid+1.2;}
+   else {min-=range*.08;max+=range*.08;}
+
+   const x=i=>pad.l+(pw*i/11);
+   const y=v=>pad.t+(max-v)*ph/(max-min);
+
+   // plot background
+   const grad=ctx.createLinearGradient(0,pad.t,0,h-pad.b);
+   grad.addColorStop(0,'#f8fffb');grad.addColorStop(1,'#ffffff');
+   ctx.fillStyle=grad;ctx.fillRect(pad.l,pad.t,pw,ph);
+
+   // grid + y labels
+   ctx.font='12px Arial';
+   for(let g=0;g<=5;g++){
+     const yy=pad.t+ph*g/5;
+     ctx.strokeStyle='#e5eee9';ctx.lineWidth=1;
+     ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(w-pad.r,yy);ctx.stroke();
+     ctx.fillStyle='#718096';ctx.textAlign='right';
+     ctx.fillText((max-(max-min)*g/5).toFixed(1),pad.l-10,yy+4);
+   }
+
+   // target line
+   if(target!==null){
+     const ty=y(target);
+     ctx.save();
+     ctx.strokeStyle='#f59f00';ctx.lineWidth=2;ctx.setLineDash([8,6]);
+     ctx.beginPath();ctx.moveTo(pad.l,ty);ctx.lineTo(w-pad.r,ty);ctx.stroke();
+     ctx.restore();
+   }
+
+   // month labels
+   ctx.fillStyle='#4a5568';ctx.font='12px Arial';ctx.textAlign='center';
+   labels.forEach((lab,i)=>ctx.fillText(lab.slice(0,3),x(i),h-24));
+
+   // colored gradient line by segment
+   for(let i=0;i<11;i++){
+     if(data[i]===null||data[i+1]===null) continue;
+     const x1=x(i),y1=y(data[i]),x2=x(i+1),y2=y(data[i+1]);
+     const st=statuses[i], et=statuses[i+1];
+     const color = st==='tidak_tercapai'||et==='tidak_tercapai' ? '#dc3545' :
+                   st==='perlu_perhatian'||et==='perlu_perhatian' ? '#f59f00' : '#198754';
+     ctx.strokeStyle=color;ctx.lineWidth=4;ctx.lineCap='round';
+     ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+   }
+
+   // area fill under line
+   const valid=data.map((v,i)=>v!==null?i:null).filter(v=>v!==null);
+   if(valid.length){
+     const first=valid[0], last=valid[valid.length-1];
+     const area=ctx.createLinearGradient(0,pad.t,0,h-pad.b);
+     area.addColorStop(0,'rgba(25,135,84,.20)');area.addColorStop(1,'rgba(25,135,84,0.01)');
+     ctx.fillStyle=area;ctx.beginPath();ctx.moveTo(x(first),y(data[first]));
+     for(let i=first+1;i<=last;i++){if(data[i]!==null)ctx.lineTo(x(i),y(data[i]));}
+     ctx.lineTo(x(last),pad.t+ph);ctx.lineTo(x(first),pad.t+ph);ctx.closePath();ctx.fill();
+   }
+
+   // points + labels + halo
+   data.forEach((v,i)=>{
+     if(v===null) return;
+     const xx=x(i), yy=y(v);
+     const st=statuses[i];
+     const color=st==='tidak_tercapai'?'#dc3545':st==='perlu_perhatian'?'#f59f00':'#198754';
+     ctx.beginPath();ctx.fillStyle='rgba(255,255,255,.95)';ctx.arc(xx,yy,8,0,Math.PI*2);ctx.fill();
+     ctx.beginPath();ctx.fillStyle=color;ctx.arc(xx,yy,5,0,Math.PI*2);ctx.fill();
+     ctx.fillStyle='#24323d';ctx.font='bold 12px Arial';ctx.textAlign='center';
+     const suffix=<?=json_encode($detail['satuan'])?>;
+     ctx.fillText(v.toFixed(2)+' '+suffix,xx,yy-14);
+   });
+
+   // title on canvas
+   ctx.fillStyle='#123f34';ctx.font='bold 14px Arial';ctx.textAlign='left';
+   ctx.fillText('Capaian bulanan',pad.l,18);
+   if(target!==null){
+     ctx.fillStyle='#9a6b00';ctx.font='12px Arial';ctx.textAlign='right';
+     ctx.fillText('Target: '+target.toFixed(2)+' '+<?=json_encode($detail['satuan'])?>,w-pad.r,18);
+   }
  }
- draw();window.addEventListener('resize',draw);
-})();
+ draw(); window.addEventListener('resize',draw);
+})();;
 document.querySelectorAll('#formCapaian12 tr').forEach(function(row){
  const n=row.querySelector('.month-num'),d=row.querySelector('.month-den'),cap=row.querySelector('.month-cap');if(!n||!d||!cap)return;
  function calc(){if(n.value!==''&&d.value!==''&&Number(d.value)!==0)cap.value=(Number(n.value)/Number(d.value)*100).toFixed(4);}
