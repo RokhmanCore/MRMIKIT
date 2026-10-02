@@ -385,7 +385,7 @@ require __DIR__.'/../partials/header.php';
 <div class="table-responsive"><table class="table align-middle"><thead><tr><th>Periode</th><th>N</th><th>D</th><th>Capaian</th><th>Target</th><th>Status</th><th>Analisis / Tindak lanjut</th><th>Aksi</th><th>Bukti</th></tr></thead><tbody>
 <?php foreach($rows as $r):$s=$r['status'];?><tr><td><?=h($r['periode_label'])?></td><td><?=h($r['numerator'])?></td><td><?=h($r['denominator'])?></td><td><strong><?= $r['capaian']!==null?h(round((float)$r['capaian'],2).' '.$detail['satuan']):'-'?></strong></td><td><?=h($r['target_snapshot'])?></td><td><span class="status-pill <?=($s==='tercapai'?'status-tercapai':($s==='tidak_tercapai'?'status-tidak':'status-belum'))?>"><?=h(strtoupper(str_replace('_',' ',$s)))?></span></td><td><div><?=h($r['analisis']??'-')?></div><small class="text-muted"><?=h($r['tindak_lanjut']??'')?></small></td>
 <td class="text-nowrap">
- <a class="btn btn-sm btn-outline-secondary mb-1" href="?detail=<?=$detail['id']?>&edit_capaian=<?=$r['id']?>">Edit</a>
+ <a class="btn btn-sm btn-outline-primary mb-1" href="#formCapaian12">Edit di tabel 12 bulan</a>
  <form method="post" class="d-inline" onsubmit="return confirm('Hapus capaian periode <?=h($r['periode_label'])?> beserta bukti yang terhubung?');">
   <input type="hidden" name="action" value="delete_capaian"><input type="hidden" name="capaian_id" value="<?=$r['id']?>">
   <button class="btn btn-sm btn-outline-danger mb-1">Hapus</button>
