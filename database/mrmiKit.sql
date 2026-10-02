@@ -139,3 +139,13 @@ CREATE TABLE IF NOT EXISTS mutu_bukti (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (capaian_id) REFERENCES mutu_capaian(id) ON DELETE CASCADE
 );
+
+
+-- Upgrade Downtime: multi-kejadian, dampak, PIC, sumber data dan bukti
+ALTER TABLE downtime ADD COLUMN IF NOT EXISTS dampak VARCHAR(30) NOT NULL DEFAULT 'total' AFTER unit_terdampak;
+ALTER TABLE downtime ADD COLUMN IF NOT EXISTS pic_id INT NULL AFTER tindak_lanjut;
+ALTER TABLE downtime ADD COLUMN IF NOT EXISTS sumber_data VARCHAR(30) NOT NULL DEFAULT 'monitoring' AFTER pic_id;
+ALTER TABLE downtime ADD COLUMN IF NOT EXISTS bukti_filename VARCHAR(255) NULL AFTER sumber_data;
+ALTER TABLE downtime ADD COLUMN IF NOT EXISTS bukti_original_name VARCHAR(255) NULL AFTER bukti_filename;
+ALTER TABLE downtime ADD COLUMN IF NOT EXISTS bukti_mime VARCHAR(150) NULL AFTER bukti_original_name;
+ALTER TABLE downtime ADD COLUMN IF NOT EXISTS bukti_size BIGINT NOT NULL DEFAULT 0 AFTER bukti_mime;
