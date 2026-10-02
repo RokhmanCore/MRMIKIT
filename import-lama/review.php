@@ -34,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Simpan pilihan EP juga ketika memilih Perlu Revisi/Tidak Berlaku.
     if ($ep > 0) {
         $pdo->prepare(
-            'UPDATE import_file SET ep_id = ?, status = 'dipetakan', catatan = ? WHERE id = ?'
+            "UPDATE import_file SET ep_id = ?, status = 'dipetakan', catatan = ? WHERE id = ?"
         )->execute([$ep, $note, $fid]);
 
         // Refresh data agar label EP yang dipilih langsung benar.
@@ -153,11 +153,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
 
                 $pdo->prepare(
-                    'UPDATE import_file
+                    "UPDATE import_file
                      SET dokumen_id = ?, review_status = 'disetujui',
                          reviewed_by = ?, reviewed_at = NOW(),
                          catatan = ?, status = 'dipetakan', ep_id = ?
-                     WHERE id = ?'
+                     WHERE id = ?"
                 )->execute([
                     $did,
                     $_SESSION['user']['id'],
