@@ -375,7 +375,7 @@ require __DIR__.'/../partials/header.php';
     <td><strong><?=$rr&&$rr['capaian']!==null?h(round((float)$rr['capaian'],2).' '.$detail['satuan']):'—'?></strong></td>
     <td><?=$rr?h($rr['target_snapshot']):h($detail['target']??'—')?></td>
     <td><span class="status-pill <?=($ss==='tercapai'?'status-tercapai':($ss==='tidak_tercapai'?'status-tidak':($ss==='perlu_perhatian'?'status-perhatian':'status-belum')))?>"><?=h(strtoupper(str_replace('_',' ',$ss)))?></span></td>
-    <td><?=$rr?h(trim(($rr['analisis']??'').' '.($rr['tindak_lanjut']??'')):'—')?></td>
+    <td><?=$rr?h(trim(($rr['analisis']??'').' '.($rr['tindak_lanjut']??'')):'—'?></td>
    </tr>
    <?php endfor; ?>
    </tbody>
