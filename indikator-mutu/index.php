@@ -619,11 +619,26 @@ if($editId){$st=$pdo->prepare("SELECT * FROM mutu_indikator WHERE id=?");$st->ex
 $pics=$pdo->query("SELECT id,nama FROM pic WHERE aktif=1 ORDER BY nama")->fetchAll();
 $eps=$pdo->query("SELECT id,kode,judul FROM elemen_penilaian ORDER BY urutan")->fetchAll();
 
+$year=(int)($_GET['tahun']??date('Y'));
+if($year<2020 || $year>2100) $year=(int)date('Y');
+
+/*
+ * Ringkasan indikator hanya mengambil periode yang sudah selesai.
+ * Jangan mengambil Oktober/November/Desember yang belum selesai karena
+ * baris kosong/0 untuk bulan tersebut dapat membuat indikator terlihat
+ * "TIDAK TERCAPAI" walaupun Januari-September sudah terisi.
+ */
 $indikators=$pdo->query("
  SELECT i.*,p.nama pic_nama,
-   (SELECT COUNT(*) FROM mutu_capaian c WHERE c.indikator_id=i.id) jumlah_periode,
-   (SELECT c.status FROM mutu_capaian c WHERE c.indikator_id=i.id ORDER BY c.periode DESC LIMIT 1) status_terakhir,
-   (SELECT c.capaian FROM mutu_capaian c WHERE c.indikator_id=i.id ORDER BY c.periode DESC LIMIT 1) capaian_terakhir
+   (SELECT COUNT(*) FROM mutu_capaian c WHERE c.indikator_id=i.id AND YEAR(c.periode)={$year}) jumlah_periode,
+   (SELECT c.status FROM mutu_capaian c
+      WHERE c.indikator_id=i.id AND YEAR(c.periode)={$year}
+        AND c.periode < DATE_FORMAT(CURDATE(),'%Y-%m-01')
+      ORDER BY c.periode DESC LIMIT 1) status_terakhir,
+   (SELECT c.capaian FROM mutu_capaian c
+      WHERE c.indikator_id=i.id AND YEAR(c.periode)={$year}
+        AND c.periode < DATE_FORMAT(CURDATE(),'%Y-%m-01')
+      ORDER BY c.periode DESC LIMIT 1) capaian_terakhir
  FROM mutu_indikator i LEFT JOIN pic p ON p.id=i.pic_id
  WHERE i.aktif=1 ORDER BY i.kode")->fetchAll();
 
@@ -640,9 +655,6 @@ if($editCapaianId){
  $st=$pdo->prepare("SELECT * FROM mutu_capaian WHERE id=?");
  $st->execute([$editCapaianId]); $editCapaian=$st->fetch();
 }
-
-$year=(int)($_GET['tahun']??date('Y'));
-if($year<2020 || $year>2100) $year=(int)date('Y');
 
 $monthNames=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
 $byMonth=[];
@@ -694,6 +706,61 @@ foreach($indikators as &$ii){
     $st->execute([(int)$ii['id'],$year]);
     $m=[];
     foreach($st as $rr) $m[(int)$rr['bulan']]=['capaian'=>$rr['capaian'],'status'=>$rr['status']];
+
+    if(($ii['kode']??'')==='IM-IT-03'){
+        /*
+         * IM-IT-03: bulan berjalan dan masa depan yang belum memiliki
+         * rekap backup nyata tidak boleh dianggap 0%/gagal.
+         */
+        $bst=$pdo->prepare("SELECT MONTH(periode) bulan,
+                                   SUM(dijadwalkan) dijadwalkan,
+                                   SUM(berhasil) berhasil,
+                                   SUM(gagal) gagal
+                            FROM mutu_backup_harian
+                            WHERE indikator_id=? AND YEAR(periode)=?
+                            GROUP BY MONTH(periode)");
+        $bst->execute([(int)$ii['id'],$year]);
+        $backupMap=[];
+        foreach($bst as $br){
+            $backupMap[(int)$br['bulan']]=[
+                'dijadwalkan'=>(int)$br['dijadwalkan'],
+                'berhasil'=>(int)$br['berhasil'],
+                'gagal'=>(int)$br['gagal']
+            ];
+        }
+
+        $currentYear=(int)date('Y');
+        $currentMonth=(int)date('n');
+        for($bm=1;$bm<=12;$bm++){
+            $isFutureOrCurrent=($year>$currentYear) || ($year===$currentYear && $bm>=$currentMonth);
+            if($isFutureOrCurrent && empty($backupMap[$bm]['dijadwalkan'])){
+                unset($m[$bm]);
+                continue;
+            }
+            if(isset($backupMap[$bm]) && $backupMap[$bm]['dijadwalkan']>0){
+                $b=$backupMap[$bm];
+                $value=round(($b['berhasil']/$b['dijadwalkan'])*100,4);
+                $target=$ii['target']!==null?(float)$ii['target']:null;
+                $status=$target===null?'belum_dinilai':($value >= $target?'tercapai':'tidak_tercapai');
+                $m[$bm]=['capaian'=>$value,'status'=>$status];
+            }
+        }
+
+        $latest=null;
+        foreach($m as $bm=>$hm){
+            if((int)$bm < $currentMonth || $year<$currentYear){
+                if($latest===null || (int)$bm>$latest['bulan']) $latest=['capaian'=>$hm['capaian'],'status'=>$hm['status'],'bulan'=>(int)$bm];
+            }
+        }
+        if($latest){
+            $ii['capaian_terakhir']=$latest['capaian'];
+            $ii['status_terakhir']=$latest['status'];
+            $ii['jumlah_periode']=$latest['bulan'];
+        }else{
+            $ii['capaian_terakhir']=null;
+            $ii['status_terakhir']='belum_dinilai';
+        }
+    }
 
     if(in_array($ii['kode'],['IM-IT-01','IM-IT-02'],true)){
         $m=[];
