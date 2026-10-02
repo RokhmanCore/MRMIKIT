@@ -51,15 +51,17 @@ if(in_array($i['kode'],['IM-IT-01','IM-IT-02'],true)){
         $downSeconds=0;foreach($merged as $iv)$downSeconds+=$iv[1]-$iv[0];
         $startToday=new DateTime('today');
         $completed=($end<=$startToday);
+        $totalSeconds=$end->getTimestamp()-$start->getTimestamp();
+        $totalHours=$totalSeconds/3600;
+        $downMinutes=round($downSeconds/60,2);
         if($i['kode']==='IM-IT-02'){
-            $value=($downSeconds>0||$completed)?round($downSeconds/60,2):null;
-            $status=$value===null?'belum_dinilai':(($i['target']!==null&&$value<=(float)$i['target'])?'tercapai':'tidak_tercapai');
-            $downtimeByMonth[$m]=['capaian'=>$value,'status'=>$status,'events'=>$eventDetails,'downtime_minutes'=>$value];
+            $value=($downSeconds>0||$completed)?$downMinutes:null;
+            $status=$value===null?'belum_dinilai':($i['target']===null?'belum_dinilai':($value<=(float)$i['target']?'tercapai':'tidak_tercapai'));
+            $downtimeByMonth[$m]=['capaian'=>$value,'status'=>$status,'events'=>$eventDetails,'downtime_minutes'=>$downMinutes,'numerator'=>$value,'denominator'=>count($eventDetails)];
         }else{
-            $totalSeconds=$end->getTimestamp()-$start->getTimestamp();
             $value=($downSeconds>0||$completed)?round(max(0,($totalSeconds-$downSeconds)/$totalSeconds)*100,4):null;
             $status=$value===null?'belum_dinilai':(($i['target']===null||(float)$value>=(float)$i['target'])?'tercapai':'tidak_tercapai');
-            $downtimeByMonth[$m]=['capaian'=>$value,'status'=>$status,'events'=>$eventDetails,'downtime_minutes'=>round($downSeconds/60,2)];
+            $downtimeByMonth[$m]=['capaian'=>$value,'status'=>$status,'events'=>$eventDetails,'downtime_minutes'=>$downMinutes,'numerator'=>$value===null?null:round(max(0,$totalHours-($downSeconds/3600)),4),'denominator'=>$value===null?null:round($totalHours,4)];
         }
     }
 }
@@ -84,8 +86,8 @@ for($m=1;$m<=12;$m++){
     if(in_array($i['kode'],['IM-IT-01','IM-IT-02'],true) && isset($downtimeByMonth[$m]) && $downtimeByMonth[$m]['capaian']!==null){
         $auto=$downtimeByMonth[$m];
         $r=$r?:[];
-        $r['numerator']=$i['kode']==='IM-IT-02'?$auto['capaian']:$auto['capaian'];
-        $r['denominator']=$i['kode']==='IM-IT-02'?count($auto['events']):($auto['capaian']!==null?100: null);
+        $r['numerator']=$auto['numerator']??null;
+        $r['denominator']=$auto['denominator']??null;
         $r['capaian']=$auto['capaian'];
         $r['target_snapshot']=$i['target'];
         $r['status']=$auto['status'];
