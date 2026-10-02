@@ -102,8 +102,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                 ON DUPLICATE KEY UPDATE numerator=VALUES(numerator),denominator=VALUES(denominator),capaian=VALUES(capaian),
                 target_snapshot=VALUES(target_snapshot),status=VALUES(status),updated_at=CURRENT_TIMESTAMP");
 
-            // Sinkronisasi IM-IT-01 hanya memperbarui bulan yang benar-benar memiliki downtime.
-            // Pilihan "Tidak Ada Downtime" dan "Belum Ada Data" tidak dihapus oleh tombol ini.
+            // Sinkronisasi IM-IT-01 berdasarkan tabel downtime:
+            // bulan selesai tanpa downtime = 100%, bulan dengan downtime dihitung otomatis,
+            // sedangkan bulan berjalan/masa depan tanpa data tetap Belum Ada Data.
             $hasil=0;
             for($bulan=1;$bulan<=12;$bulan++){
                 $start=new DateTime(sprintf('%04d-%02d-01 00:00:00',$tahun,$bulan));
@@ -123,7 +124,30 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                     if(!$merged || $iv[0]>$merged[count($merged)-1][1]) $merged[]=$iv;
                     else $merged[count($merged)-1][1]=max($merged[count($merged)-1][1],$iv[1]);
                 }
-                if(!$merged) continue;
+                $nowYear=(int)date('Y');
+                $nowMonth=(int)date('n');
+                $isPastMonth=($tahun<$nowYear) || ($tahun===$nowYear && $bulan<$nowMonth);
+
+                // Bulan yang sudah selesai tanpa downtime = ketersediaan 100%.
+                if(!$merged){
+                    if($isPastMonth){
+                        $totalHours=$totalSeconds/3600;
+                        $cap=100.0;
+                        $target=$ind['target']!==null?(float)$ind['target']:null;
+                        $status=$target===null?'belum_dinilai':($cap >= $target?'tercapai':'tidak_tercapai');
+                        $up=$pdo->prepare("INSERT INTO mutu_capaian
+                            (indikator_id,periode,numerator,denominator,capaian,target_snapshot,analisis,tindak_lanjut,status,created_by)
+                            VALUES (?,?,?,?,?,?,?,?,?,?)
+                            ON DUPLICATE KEY UPDATE numerator=VALUES(numerator),denominator=VALUES(denominator),
+                            capaian=VALUES(capaian),target_snapshot=VALUES(target_snapshot),
+                            status=VALUES(status),updated_at=CURRENT_TIMESTAMP");
+                        $up->execute([$indikator_id,$start->format('Y-m-d'),round($totalHours,4),round($totalHours,4),
+                            $cap,$target,'Tidak ditemukan kejadian downtime pada bulan ini. Ketersediaan SIMRS 100%.',
+                            'Tidak ada tindak lanjut karena tidak terdapat downtime.',$status,$_SESSION['user']['id']??null]);
+                        $hasil++;
+                    }
+                    continue;
+                }
 
                 $downSeconds=0;
                 foreach($merged as $iv) $downSeconds += $iv[1]-$iv[0];
@@ -144,7 +168,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                     round($cap,4),$target,'','',$status,$_SESSION['user']['id']??null]);
                 $hasil++;
             }
-            $msg="IM-IT-01 disinkronkan dari downtime. Hanya bulan yang memiliki kejadian downtime yang diperbarui: {$hasil} bulan.";
+            $msg="IM-IT-01 disinkronkan dari tabel Downtime. {$hasil} bulan diperbarui: bulan dengan downtime dihitung otomatis, sedangkan bulan yang sudah selesai tanpa downtime menjadi 100%. Bulan berjalan/masa depan tanpa data tetap kosong.";
         }
 
         if ($action==='hitung_downtime_simrs') {
@@ -592,7 +616,7 @@ require __DIR__.'/../partials/header.php';
    </form>
   </div>
  </div>
- <div class="alert alert-warning mt-3 mb-0 small">Untuk <strong>Ada Downtime</strong>, catat semua kejadian di menu <strong>Downtime</strong>. Untuk <strong>Tidak Ada Downtime</strong>, pilih hanya setelah diverifikasi dengan bukti monitoring/log/laporan IT. <strong>Belum Ada Data</strong> dibiarkan kosong.</div>
+ <div class="alert alert-warning mt-3 mb-0 small"><strong>Otomatis dari Downtime:</strong> semua kejadian pada tabel <strong>Downtime</strong> dijumlahkan per bulan. Jika bulan sudah selesai dan tidak ada satu pun kejadian downtime, IM-IT-01 otomatis menjadi <strong>100%</strong>. Bulan berjalan/masa depan tanpa data tetap <strong>Belum Ada Data</strong>.</div>
 </div></div>
 <?php endif; ?>
 
