@@ -42,3 +42,12 @@ INSERT IGNORE INTO evidence_requirement(ep_id,kode,nama,jenis,wajib,urutan) SELE
 CREATE TABLE IF NOT EXISTS import_batch (id INT AUTO_INCREMENT PRIMARY KEY, nama_batch VARCHAR(255) NOT NULL, tahun_sumber YEAR NOT NULL, filename_zip VARCHAR(255), total_file INT DEFAULT 0, status ENUM('diunggah','dipetakan','selesai') DEFAULT 'diunggah', created_by INT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS import_file (id INT AUTO_INCREMENT PRIMARY KEY, batch_id INT NOT NULL, relative_path VARCHAR(500) NOT NULL, original_name VARCHAR(255) NOT NULL, extension VARCHAR(20), size_bytes BIGINT DEFAULT 0, tahun_sumber YEAR NOT NULL, ep_id INT NULL, dokumen_id INT NULL, status ENUM('belum_dipetakan','dipetakan','diabaikan') DEFAULT 'belum_dipetakan', catatan TEXT, FOREIGN KEY(batch_id) REFERENCES import_batch(id) ON DELETE CASCADE, FOREIGN KEY(ep_id) REFERENCES elemen_penilaian(id) ON DELETE SET NULL, FOREIGN KEY(dokumen_id) REFERENCES dokumen(id) ON DELETE SET NULL);
 CREATE TABLE IF NOT EXISTS dokumen_sumber (dokumen_id INT NOT NULL, tahun_sumber YEAR NOT NULL, batch_id INT NULL, sumber ENUM('akreditasi_lama','baru') DEFAULT 'akreditasi_lama', PRIMARY KEY(dokumen_id,tahun_sumber), FOREIGN KEY(dokumen_id) REFERENCES dokumen(id) ON DELETE CASCADE, FOREIGN KEY(batch_id) REFERENCES import_batch(id) ON DELETE SET NULL);
+
+ALTER TABLE dokumen ADD COLUMN IF NOT EXISTS status_akreditasi ENUM('arsip','review','aktif_2026','tidak_berlaku') NOT NULL DEFAULT 'arsip';
+ALTER TABLE dokumen ADD COLUMN IF NOT EXISTS tahun_aktif YEAR NULL;
+ALTER TABLE dokumen ADD COLUMN IF NOT EXISTS reviewed_by INT NULL;
+ALTER TABLE dokumen ADD COLUMN IF NOT EXISTS reviewed_at DATETIME NULL;
+ALTER TABLE dokumen ADD COLUMN IF NOT EXISTS review_catatan TEXT NULL;
+ALTER TABLE import_file ADD COLUMN IF NOT EXISTS reviewed_by INT NULL;
+ALTER TABLE import_file ADD COLUMN IF NOT EXISTS reviewed_at DATETIME NULL;
+ALTER TABLE import_file ADD COLUMN IF NOT EXISTS review_status ENUM('belum_review','disetujui','perlu_revisi','ditolak') NOT NULL DEFAULT 'belum_review';
