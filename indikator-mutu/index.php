@@ -13,9 +13,15 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
         $action=$_POST['action']??'';
 
         if ($action==='add_indicator') {
+            $edit_post=(int)($_POST['edit_id']??0);
             $st=$pdo->prepare("INSERT INTO mutu_indikator
                 (kode,nama,definisi_operasional,numerator_label,denominator_label,formula,target,satuan,arah,frekuensi,sumber_data,metode_pengumpulan,pic_id,created_by)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+            if ($edit_post) {
+                $st=$pdo->prepare("UPDATE mutu_indikator SET kode=?,nama=?,definisi_operasional=?,numerator_label=?,denominator_label=?,formula=?,target=?,satuan=?,arah=?,frekuensi=?,sumber_data=?,metode_pengumpulan=?,pic_id=? WHERE id=?");
+                $st->execute([trim($_POST['kode']),trim($_POST['nama']),trim($_POST['definisi_operasional']??''),trim($_POST['numerator_label']??''),trim($_POST['denominator_label']??''),trim($_POST['formula']??''),($_POST['target']!==''?$_POST['target']:null),trim($_POST['satuan']??'%'),$_POST['arah']??'sesuai_target',$_POST['frekuensi']??'bulanan',trim($_POST['sumber_data']??''),trim($_POST['metode_pengumpulan']??''),($_POST['pic_id']!==''?$_POST['pic_id']:null),$edit_post]);
+                $msg='Indikator berhasil diperbarui.';
+            } else {
             $st->execute([
                 trim($_POST['kode']),trim($_POST['nama']),trim($_POST['definisi_operasional']??''),
                 trim($_POST['numerator_label']??''),trim($_POST['denominator_label']??''),trim($_POST['formula']??''),
@@ -24,6 +30,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                 trim($_POST['metode_pengumpulan']??''),($_POST['pic_id']!==''?$_POST['pic_id']:null),$_SESSION['user']['id']??null
             ]);
             $msg='Indikator berhasil ditambahkan.';
+            }
         }
 
         if ($action==='save_capaian') {
@@ -148,7 +155,7 @@ require __DIR__.'/../partials/header.php';
 
 <div class="collapse <?=($edit?'show':'')?>" id="formIndikator"><div class="card shadow-sm mutu-card mb-4"><div class="card-body">
 <h5><?= $edit?'Edit indikator':'Tambah indikator baru'?></h5>
-<form method="post"><input type="hidden" name="action" value="add_indicator">
+<form method="post"><input type="hidden" name="action" value="add_indicator"><input type="hidden" name="edit_id" value="<?=h($edit['id']??0)?>">
 <div class="row g-3">
 <div class="col-md-3"><label class="form-label">Kode</label><input name="kode" class="form-control" required value="<?=h($edit['kode']??'')?>"></div>
 <div class="col-md-9"><label class="form-label">Nama indikator</label><input name="nama" class="form-control" required value="<?=h($edit['nama']??'')?>"></div>
