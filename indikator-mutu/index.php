@@ -33,6 +33,16 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             }
         }
 
+        if ($action==='delete_capaian') {
+            $id=(int)($_POST['capaian_id']??0);
+            if(!$id) throw new RuntimeException('Capaian tidak valid.');
+            $st=$pdo->prepare("SELECT id FROM mutu_capaian WHERE id=?");
+            $st->execute([$id]);
+            if(!$st->fetch()) throw new RuntimeException('Capaian tidak ditemukan.');
+            $pdo->prepare("DELETE FROM mutu_capaian WHERE id=?")->execute([$id]);
+            $msg='Capaian dan bukti terkait berhasil dihapus.';
+        }
+
         if ($action==='save_capaian') {
             $indikator_id=(int)$_POST['indikator_id'];
             $periode=($_POST['periode']??'').' -01';
@@ -54,14 +64,21 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                     $status=((float)$cap <= (float)$target) ? 'tercapai' : 'tidak_tercapai';
                 }
             }
-            $st=$pdo->prepare("INSERT INTO mutu_capaian
-                (indikator_id,periode,numerator,denominator,capaian,target_snapshot,analisis,tindak_lanjut,status,created_by)
-                VALUES (?,?,?,?,?,?,?,?,?,?)
-                ON DUPLICATE KEY UPDATE numerator=VALUES(numerator),denominator=VALUES(denominator),capaian=VALUES(capaian),
-                target_snapshot=VALUES(target_snapshot),analisis=VALUES(analisis),tindak_lanjut=VALUES(tindak_lanjut),
-                status=VALUES(status),updated_at=CURRENT_TIMESTAMP");
-            $st->execute([$indikator_id,$periode,$num,$den,$cap,$target,trim($_POST['analisis']??''),trim($_POST['tindak_lanjut']??''),$status,$_SESSION['user']['id']??null]);
-            $msg='Capaian periode berhasil disimpan.';
+            $editCapaian=(int)($_POST['edit_capaian_id']??0);
+            if($editCapaian){
+                $st=$pdo->prepare("UPDATE mutu_capaian SET periode=?,numerator=?,denominator=?,capaian=?,target_snapshot=?,analisis=?,tindak_lanjut=?,status=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND indikator_id=?");
+                $st->execute([$periode,$num,$den,$cap,$target,trim($_POST['analisis']??''),trim($_POST['tindak_lanjut']??''),$status,$editCapaian,$indikator_id]);
+                $msg='Capaian berhasil diperbarui.';
+            } else {
+                $st=$pdo->prepare("INSERT INTO mutu_capaian
+                    (indikator_id,periode,numerator,denominator,capaian,target_snapshot,analisis,tindak_lanjut,status,created_by)
+                    VALUES (?,?,?,?,?,?,?,?,?,?)
+                    ON DUPLICATE KEY UPDATE numerator=VALUES(numerator),denominator=VALUES(denominator),capaian=VALUES(capaian),
+                    target_snapshot=VALUES(target_snapshot),analisis=VALUES(analisis),tindak_lanjut=VALUES(tindak_lanjut),
+                    status=VALUES(status),updated_at=CURRENT_TIMESTAMP");
+                $st->execute([$indikator_id,$periode,$num,$den,$cap,$target,trim($_POST['analisis']??''),trim($_POST['tindak_lanjut']??''),$status,$_SESSION['user']['id']??null]);
+                $msg='Capaian periode berhasil disimpan.';
+            }
         }
 
         if ($action==='upload_bukti') {
@@ -127,6 +144,13 @@ $mapId=(int)($_GET['map']??0);
 if($mapId){
  $st=$pdo->prepare("SELECT ep_id FROM mutu_indikator_ep WHERE indikator_id=?");$st->execute([$mapId]);
  foreach($st as $r)$selectedMap[]=(int)$r['ep_id'];
+}
+
+$editCapaianId=(int)($_GET['edit_capaian']??0);
+$editCapaian=null;
+if($editCapaianId){
+ $st=$pdo->prepare("SELECT * FROM mutu_capaian WHERE id=?");
+ $st->execute([$editCapaianId]); $editCapaian=$st->fetch();
 }
 
 $detailId=(int)($_GET['detail']??0);
@@ -212,21 +236,28 @@ require __DIR__.'/../partials/header.php';
 
 <?php if($detail): ?>
 <div class="card shadow-sm mutu-card mb-4"><div class="card-body">
-<h5>Capaian: <?=h($detail['kode'])?> — <?=h($detail['nama'])?></h5>
+<h5><?= $editCapaian ? 'Edit capaian' : 'Tambah capaian' ?>: <?=h($detail['kode'])?> — <?=h($detail['nama'])?></h5>
 <div class="small text-muted mb-3">Target: <?= $detail['target']!==null?h($detail['target'].' '.$detail['satuan']):'belum ditetapkan'?> · Arah: <?=h($detail['arah'])?></div>
-<form method="post" class="border rounded p-3 mb-4"><input type="hidden" name="action" value="save_capaian"><input type="hidden" name="indikator_id" value="<?=$detail['id']?>">
+<form method="post" class="border rounded p-3 mb-4"><input type="hidden" name="action" value="save_capaian"><input type="hidden" name="indikator_id" value="<?=$detail['id']?>"><input type="hidden" name="edit_capaian_id" value="<?=h($editCapaian['id']??0)?>">
 <div class="row g-3">
-<div class="col-md-2"><label class="form-label">Periode</label><input type="month" name="periode" class="form-control" required value="<?=date('Y-m')?>"></div>
-<div class="col-md-2"><label class="form-label">Numerator</label><input type="number" step="0.0001" name="numerator" class="form-control"></div>
-<div class="col-md-2"><label class="form-label">Denominator</label><input type="number" step="0.0001" name="denominator" class="form-control"></div>
-<div class="col-md-2"><label class="form-label">Capaian</label><input type="number" step="0.0001" name="capaian" class="form-control" placeholder="otomatis bila N/D"></div>
-<div class="col-md-2"><label class="form-label">Target periode</label><input type="number" step="0.0001" name="target_snapshot" class="form-control" value="<?=h($detail['target']??'')?>"></div>
+<div class="col-md-2"><label class="form-label">Periode</label><input type="month" name="periode" class="form-control" required value="<?=h($editCapaian ? substr($editCapaian['periode'],0,7) : date('Y-m'))?>"></div>
+<div class="col-md-2"><label class="form-label">Numerator</label><input type="number" step="0.0001" name="numerator" class="form-control" value="<?=h($editCapaian['numerator']??'')?>"></div>
+<div class="col-md-2"><label class="form-label">Denominator</label><input type="number" step="0.0001" name="denominator" class="form-control" value="<?=h($editCapaian['denominator']??'')?>"></div>
+<div class="col-md-2"><label class="form-label">Capaian</label><input type="number" step="0.0001" name="capaian" class="form-control" placeholder="otomatis bila N/D" value="<?=h($editCapaian['capaian']??'')?>"></div>
+<div class="col-md-2"><label class="form-label">Target periode</label><input type="number" step="0.0001" name="target_snapshot" class="form-control" value="<?=h($editCapaian['target_snapshot'] ?? $detail['target'] ?? '')?>"></div>
 <div class="col-md-2 d-flex align-items-end"><button class="btn btn-success w-100">Simpan</button></div>
-<div class="col-12"><label class="form-label">Analisis</label><textarea name="analisis" class="form-control" rows="2"></textarea></div>
-<div class="col-12"><label class="form-label">Tindak lanjut</label><textarea name="tindak_lanjut" class="form-control" rows="2"></textarea></div>
+<div class="col-12"><label class="form-label">Analisis</label><textarea name="analisis" class="form-control" rows="2"><?=h($editCapaian['analisis']??'')?></textarea></div>
+<div class="col-12"><label class="form-label">Tindak lanjut</label><textarea name="tindak_lanjut" class="form-control" rows="2"><?=h($editCapaian['tindak_lanjut']??'')?></textarea></div>
 </div></form>
-<div class="table-responsive"><table class="table align-middle"><thead><tr><th>Periode</th><th>N</th><th>D</th><th>Capaian</th><th>Target</th><th>Status</th><th>Analisis / Tindak lanjut</th><th>Bukti</th></tr></thead><tbody>
+<div class="table-responsive"><table class="table align-middle"><thead><tr><th>Periode</th><th>N</th><th>D</th><th>Capaian</th><th>Target</th><th>Status</th><th>Analisis / Tindak lanjut</th><th>Aksi</th><th>Bukti</th></tr></thead><tbody>
 <?php foreach($rows as $r):$s=$r['status'];?><tr><td><?=h($r['periode_label'])?></td><td><?=h($r['numerator'])?></td><td><?=h($r['denominator'])?></td><td><strong><?= $r['capaian']!==null?h(round((float)$r['capaian'],2).' '.$detail['satuan']):'-'?></strong></td><td><?=h($r['target_snapshot'])?></td><td><span class="status-pill <?=($s==='tercapai'?'status-tercapai':($s==='tidak_tercapai'?'status-tidak':'status-belum'))?>"><?=h(strtoupper(str_replace('_',' ',$s)))?></span></td><td><div><?=h($r['analisis']??'-')?></div><small class="text-muted"><?=h($r['tindak_lanjut']??'')?></small></td>
+<td class="text-nowrap">
+ <a class="btn btn-sm btn-outline-secondary mb-1" href="?detail=<?=$detail['id']?>&edit_capaian=<?=$r['id']?>">Edit</a>
+ <form method="post" class="d-inline" onsubmit="return confirm('Hapus capaian periode <?=h($r['periode_label'])?> beserta bukti yang terhubung?');">
+  <input type="hidden" name="action" value="delete_capaian"><input type="hidden" name="capaian_id" value="<?=$r['id']?>">
+  <button class="btn btn-sm btn-outline-danger mb-1">Hapus</button>
+ </form>
+</td>
 <td style="min-width:260px">
  <?php foreach(($buktiByCapaian[(int)$r['id']]??[]) as $b): ?>
    <div class="mb-1"><a href="download.php?id=<?=$b['id']?>" target="_blank"><?=h($b['original_name'])?></a> <small class="text-muted">(<?=round($b['size_bytes']/1024,1)?> KB)</small></div>
