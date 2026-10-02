@@ -81,6 +81,30 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             }
         }
 
+        if ($action==='sinkronkan_im_it_01') {
+            $indikator_id=(int)($_POST['indikator_id']??0);
+            $tahun=(int)($_POST['tahun']??date('Y'));
+            if($indikator_id<1 || $tahun<2020 || $tahun>2100) throw new RuntimeException('Indikator atau tahun tidak valid.');
+
+            $st=$pdo->prepare("SELECT * FROM mutu_indikator WHERE id=?");
+            $st->execute([$indikator_id]); $ind=$st->fetch();
+            if(!$ind) throw new RuntimeException('Indikator tidak ditemukan.');
+            if($ind['kode']!=='IM-IT-01') throw new RuntimeException('Fitur ini khusus IM-IT-01 Ketersediaan SIMRS.');
+
+            // Sumber utama heatmap adalah data capaian 12 bulan yang sudah tersimpan.
+            // Jangan hitung ulang dari tabel downtime agar hasil pada tabel 12 bulan
+            // dan heatmap selalu identik.
+            $st=$pdo->prepare("SELECT periode,capaian,numerator,denominator,target_snapshot,status
+                               FROM mutu_capaian
+                               WHERE indikator_id=? AND periode BETWEEN ? AND ?
+                               ORDER BY periode");
+            $st->execute([$indikator_id,sprintf('%04d-01-01',$tahun),sprintf('%04d-12-31',$tahun)]);
+            $rows=$st->fetchAll();
+
+            $hasil=count($rows);
+            $msg="IM-IT-01 disinkronkan dengan tabel Capaian 12 Bulan. {$hasil} bulan tersedia. Heatmap menggunakan data yang sama; tidak ada perhitungan ulang dari Downtime.";
+        }
+
         if ($action==='hitung_ketersediaan_simrs') {
             $indikator_id=(int)($_POST['indikator_id']??0);
             $tahun=(int)($_POST['tahun']??date('Y'));
@@ -604,19 +628,19 @@ require __DIR__.'/../partials/header.php';
 <div class="card border-success shadow-sm mb-4"><div class="card-body">
  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div><h6 class="mb-1">⚙️ Hitung otomatis dari Downtime SIMRS</h6>
-   <div class="small text-muted">Ambil semua catatan Downtime yang tercatat di menu Downtime, potong otomatis jika melewati batas bulan, lalu hitung waktu tersedia dan persentase ketersediaan.</div>
+   <div class="small text-muted">Heatmap mengambil langsung data yang sudah tersimpan pada tabel <strong>Capaian 12 Bulan</strong>. Data pada tabel tersebut dapat berasal dari pencatatan downtime dan kondisi bulan yang Anda pilih.</div>
   </div>
 <div class="d-flex gap-2 flex-wrap">
    <a class="btn btn-outline-success" href="../downtime/tambah.php">➕ Catat Downtime</a>
-   <form method="post" class="m-0" onsubmit="return confirm('Hitung ulang IM-IT-01 dari log Downtime untuk tahun <?=h($year)?>? Hanya bulan yang memiliki catatan downtime yang akan dihitung.');">
-    <input type="hidden" name="action" value="hitung_ketersediaan_simrs">
+   <form method="post" class="m-0" onsubmit="return confirm('Sinkronkan Heatmap IM-IT-01 dengan data Capaian 12 Bulan tahun <?=h($year)?>?');">
+    <input type="hidden" name="action" value="sinkronkan_im_it_01">
     <input type="hidden" name="indikator_id" value="<?=$detail['id']?>">
     <input type="hidden" name="tahun" value="<?=$year?>">
-    <button class="btn btn-success">🔄 Hitung dari Downtime</button>
+    <button class="btn btn-success">🔄 Sinkronkan Data 12 Bulan</button>
    </form>
   </div>
  </div>
- <div class="alert alert-warning mt-3 mb-0 small"><strong>Otomatis dari Downtime:</strong> semua kejadian pada tabel <strong>Downtime</strong> dijumlahkan per bulan. Jika bulan sudah selesai dan tidak ada satu pun kejadian downtime, IM-IT-01 otomatis menjadi <strong>100%</strong>. Bulan berjalan/masa depan tanpa data tetap <strong>Belum Ada Data</strong>.</div>
+ <div class="alert alert-warning mt-3 mb-0 small"><strong>Sumber Heatmap:</strong> data IM-IT-01 pada Heatmap diambil dari <strong>Capaian 12 Bulan</strong> yang sudah tersimpan. Jadi angka dan status Heatmap akan sama persis dengan tabel di bawah, tanpa menghitung ulang atau mengganti data yang sudah Anda isi.</div>
 </div></div>
 <?php endif; ?>
 
