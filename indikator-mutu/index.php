@@ -426,7 +426,7 @@ require __DIR__.'/../partials/header.php';
 <button class="btn btn-success mt-2">Simpan Pemetaan</button></form></div></div>
 <?php endif;?>
 
-<?php if($detail): ?>
+<?php if($detail) { ?>
 <div class="card shadow-sm mutu-card mb-4"><div class="card-body">
 <h5><?= $editCapaian ? 'Edit capaian' : 'Tambah capaian' ?>: <?=h($detail['kode'])?> — <?=h($detail['nama'])?></h5>
 <div class="row g-3 mb-4">
@@ -558,7 +558,7 @@ require __DIR__.'/../partials/header.php';
 </tbody></table></div>
 </div></div>
 
-<?php endif; ?>
+<?php } ?>
 
 <script>
 (function(){
