@@ -35,7 +35,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
 
         if ($action==='save_capaian') {
             $indikator_id=(int)$_POST['indikator_id'];
-            $periode=$_POST['periode'];
+            $periode=($_POST['periode']??'').' -01';
+            $periode=str_replace(' ','',$periode);
             $num=($_POST['numerator']!==''?$_POST['numerator']:null);
             $den=($_POST['denominator']!==''?$_POST['denominator']:null);
             $target=($_POST['target_snapshot']!==''?$_POST['target_snapshot']:null);
