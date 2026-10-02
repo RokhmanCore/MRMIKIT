@@ -35,29 +35,52 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
  }
  $st=$pdo->prepare('INSERT INTO downtime(mulai,selesai,jenis,penyebab,unit_terdampak,dampak,tindakan,evaluasi,tindak_lanjut,pic_id,sumber_data,bukti_filename,bukti_original_name,bukti_mime,bukti_size,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
  $st->execute([$mulai,$selesai?:null,$_POST['jenis']??'Tidak Terencana',$_POST['penyebab']??'',$_POST['unit_terdampak']??'',$_POST['dampak']??'total',$_POST['tindakan']??'',$_POST['evaluasi']??'',$_POST['tindak_lanjut']??'',($_POST['pic_id']??'')?:null,$_POST['sumber_data']??'monitoring',$fileName,$orig,$mime,$size,$_SESSION['user']['id']]);
- // Sinkronkan IM-IT-01 otomatis untuk tahun kejadian setelah downtime tersimpan.
+ // Sinkronkan IM-IT-01 hanya untuk bulan yang terkena kejadian downtime.
+ // Bulan tanpa downtime TIDAK dibuat sebagai capaian 100%.
  $tahun=(int)date('Y',strtotime($mulai));
  $indSt=$pdo->prepare("SELECT * FROM mutu_indikator WHERE kode='IM-IT-01' AND aktif=1 LIMIT 1");
  $indSt->execute(); $ind=$indSt->fetch();
  if($ind){
    $ev=$pdo->query("SELECT mulai,selesai FROM downtime WHERE selesai IS NOT NULL AND selesai>mulai ORDER BY mulai")->fetchAll();
    for($bulan=1;$bulan<=12;$bulan++){
-     $start=new DateTime(sprintf('%04d-%02d-01 00:00:00',$tahun,$bulan)); $end=(clone $start)->modify('+1 month');
-     $totalSeconds=$end->getTimestamp()-$start->getTimestamp(); $intervals=[];
+     $start=new DateTime(sprintf('%04d-%02d-01 00:00:00',$tahun,$bulan));
+     $end=(clone $start)->modify('+1 month');
+     $totalSeconds=$end->getTimestamp()-$start->getTimestamp();
+     $intervals=[];
      foreach($ev as $x){
        $ds=new DateTime($x['mulai']); $de=new DateTime($x['selesai']);
        $cs=$ds>$start?$ds:$start; $ce=$de<$end?$de:$end;
        if($ce>$cs) $intervals[]=[$cs->getTimestamp(),$ce->getTimestamp()];
      }
-     usort($intervals,fn($a,$b)=>$a[0]<=>$b[0]); $merged=[];
-     foreach($intervals as $iv){ if(!$merged || $iv[0]>$merged[count($merged)-1][1]) $merged[]=$iv; else $merged[count($merged)-1][1]=max($merged[count($merged)-1][1],$iv[1]); }
-     $downSeconds=0; foreach($merged as $iv)$downSeconds+=$iv[1]-$iv[0];
-     $totalHours=$totalSeconds/3600; $downHours=$downSeconds/3600; $availableHours=max(0,$totalHours-$downHours);
-     $cap=$totalHours>0?($availableHours/$totalHours)*100:0; $target=$ind['target']!==null?(float)$ind['target']:null;
+     usort($intervals,fn($a,$b)=>$a[0]<=>$b[0]);
+     $merged=[];
+     foreach($intervals as $iv){
+       if(!$merged || $iv[0]>$merged[count($merged)-1][1]) $merged[]=$iv;
+       else $merged[count($merged)-1][1]=max($merged[count($merged)-1][1],$iv[1]);
+     }
+     if(!$merged) continue;
+
+     $downSeconds=0;
+     foreach($merged as $iv) $downSeconds += $iv[1]-$iv[0];
+     $totalHours=$totalSeconds/3600;
+     $downHours=$downSeconds/3600;
+     $availableHours=max(0,$totalHours-$downHours);
+     $cap=$totalHours>0?($availableHours/$totalHours)*100:0;
+     $target=$ind['target']!==null?(float)$ind['target']:null;
      $status=$target===null?'belum_dinilai':($cap >= $target?'tercapai':'tidak_tercapai');
-     $oldSt=$pdo->prepare("SELECT analisis,tindak_lanjut FROM mutu_capaian WHERE indikator_id=? AND periode=?"); $oldSt->execute([$ind['id'],$start->format('Y-m-d')]); $old=$oldSt->fetch();
-     $up=$pdo->prepare("INSERT INTO mutu_capaian(indikator_id,periode,numerator,denominator,capaian,target_snapshot,analisis,tindak_lanjut,status,created_by) VALUES(?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE numerator=VALUES(numerator),denominator=VALUES(denominator),capaian=VALUES(capaian),target_snapshot=VALUES(target_snapshot),status=VALUES(status),updated_at=CURRENT_TIMESTAMP");
-     $up->execute([$ind['id'],$start->format('Y-m-d'),round($availableHours,4),round($totalHours,4),round($cap,4),$target,$old['analisis']??'',$old['tindak_lanjut']??'',$status,$_SESSION['user']['id']]);
+
+     $oldSt=$pdo->prepare("SELECT analisis,tindak_lanjut FROM mutu_capaian WHERE indikator_id=? AND periode=?");
+     $oldSt->execute([$ind['id'],$start->format('Y-m-d')]);
+     $old=$oldSt->fetch();
+
+     $up=$pdo->prepare("INSERT INTO mutu_capaian
+       (indikator_id,periode,numerator,denominator,capaian,target_snapshot,analisis,tindak_lanjut,status,created_by)
+       VALUES(?,?,?,?,?,?,?,?,?,?)
+       ON DUPLICATE KEY UPDATE numerator=VALUES(numerator),denominator=VALUES(denominator),
+       capaian=VALUES(capaian),target_snapshot=VALUES(target_snapshot),status=VALUES(status),
+       updated_at=CURRENT_TIMESTAMP");
+     $up->execute([$ind['id'],$start->format('Y-m-d'),round($availableHours,4),round($totalHours,4),
+       round($cap,4),$target,$old['analisis']??'',$old['tindak_lanjut']??'',$status,$_SESSION['user']['id']]);
    }
  }
  header('Location:index.php'); exit;
