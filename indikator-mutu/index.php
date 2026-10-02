@@ -735,7 +735,12 @@ require __DIR__.'/../partials/header.php';
   <td><?=h($i['pic_nama']??'-')?></td>
   <td><?= $i['capaian_terakhir']!==null ? h(round((float)$i['capaian_terakhir'],2)).' '.h($i['satuan']) : '-'?></td>
   <td><?php $s=$i['status_terakhir']??'belum_dinilai';?><span class="status-pill <?=($s==='tercapai'?'status-tercapai':($s==='tidak_tercapai'?'status-tidak':($s==='perlu_perhatian'?'status-perhatian':'status-belum')))?>"><?=strtoupper(str_replace('_',' ',$s))?></span></td>
-  <td class="text-nowrap"><a class="btn btn-sm btn-outline-primary" href="?detail=<?=$i['id']?>">Capaian</a> <a class="btn btn-sm btn-outline-success" href="?map=<?=$i['id']?>">EP</a> <a class="btn btn-sm btn-outline-secondary" href="?edit=<?=$i['id']?>">Edit</a></td>
+  <td class="text-nowrap">
+  <a class="btn btn-sm btn-outline-primary mb-1" href="?detail=<?=$i['id']?>">Capaian</a>
+  <a class="btn btn-sm btn-outline-success mb-1" href="?map=<?=$i['id']?>">EP</a>
+  <a class="btn btn-sm btn-outline-secondary mb-1" href="?edit=<?=$i['id']?>">Edit</a>
+  <a class="btn btn-sm btn-outline-danger mb-1" target="_blank" href="laporan.php?id=<?=$i['id']?>&tahun=<?=$year?>">📄 Download Laporan</a>
+</td>
  </tr>
  <?php endforeach;?>
  </tbody></table></div>
