@@ -530,14 +530,86 @@ if($year<2020 || $year>2100) $year=(int)date('Y');
 $monthNames=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
 $byMonth=[];
 
+/* Sumber otomatis IM-IT-01 dan IM-IT-02 dari tabel downtime yang sama. */
+$downtimeEvents=$pdo->query("SELECT mulai,selesai FROM downtime WHERE selesai IS NOT NULL AND selesai>mulai ORDER BY mulai")->fetchAll();
+$downtimeAuto=[];
+$today=new DateTime('today');
+
+for($dm=1;$dm<=12;$dm++){
+    $ds=new DateTime(sprintf('%04d-%02d-01 00:00:00',$year,$dm));
+    $de=(clone $ds)->modify('+1 month');
+    $intervals=[];
+    foreach($downtimeEvents as $ev){
+        $es=new DateTime($ev['mulai']);
+        $ee=new DateTime($ev['selesai']);
+        $cs=$es>$ds?$es:$ds;
+        $ce=$ee<$de?$ee:$de;
+        if($ce>$cs) $intervals[]=[$cs->getTimestamp(),$ce->getTimestamp()];
+    }
+    usort($intervals,fn($a,$b)=>$a[0]<=>$b[0]);
+    $merged=[];
+    foreach($intervals as $iv){
+        if(!$merged || $iv[0]>$merged[count($merged)-1][1]) $merged[]=$iv;
+        else $merged[count($merged)-1][1]=max($merged[count($merged)-1][1],$iv[1]);
+    }
+    $downSeconds=0;
+    foreach($merged as $iv) $downSeconds += $iv[1]-$iv[0];
+
+    $completed=($de <= $today);
+    $hasEvent=($downSeconds>0);
+    if(!$completed && !$hasEvent){
+        $downtimeAuto[$dm]=null;
+        continue;
+    }
+
+    $totalSeconds=$de->getTimestamp()-$ds->getTimestamp();
+    $downtimeAuto[$dm]=[
+        'downtime_minutes'=>round($downSeconds/60,2),
+        'availability'=>$totalSeconds>0 ? round(max(0,($totalSeconds-$downSeconds)/$totalSeconds)*100,4) : 0,
+        'has_event'=>$hasEvent,
+        'completed'=>$completed
+    ];
+}
+
 $heatmapData=[];
-foreach($indikators as $ii){
+foreach($indikators as &$ii){
     $st=$pdo->prepare("SELECT MONTH(periode) bulan,capaian,status FROM mutu_capaian WHERE indikator_id=? AND YEAR(periode)=? ORDER BY periode");
     $st->execute([(int)$ii['id'],$year]);
     $m=[];
     foreach($st as $rr) $m[(int)$rr['bulan']]=['capaian'=>$rr['capaian'],'status'=>$rr['status']];
+
+    if(in_array($ii['kode'],['IM-IT-01','IM-IT-02'],true)){
+        $m=[];
+        $latest=null;
+        for($dm=1;$dm<=12;$dm++){
+            $auto=$downtimeAuto[$dm]??null;
+            if($auto===null) continue;
+
+            $value=($ii['kode']==='IM-IT-01') ? $auto['availability'] : $auto['downtime_minutes'];
+            $target=$ii['target']!==null?(float)$ii['target']:null;
+            $arah=$ii['arah']??'sesuai_target';
+            if($target===null){
+                $status='belum_dinilai';
+            }else{
+                $ok=($arah==='turun') ? ($value<=$target) : (($arah==='naik') ? ($value>=$target) : ($value>=$target));
+                $status=$ok?'tercapai':'tidak_tercapai';
+            }
+            $m[$dm]=['capaian'=>$value,'status'=>$status];
+            if($auto['completed']) $latest=['capaian'=>$value,'status'=>$status,'bulan'=>$dm];
+        }
+        if($latest){
+            $ii['capaian_terakhir']=$latest['capaian'];
+            $ii['status_terakhir']=$latest['status'];
+            $ii['jumlah_periode']=$latest['bulan'];
+        }else{
+            $ii['capaian_terakhir']=null;
+            $ii['status_terakhir']='belum_dinilai';
+        }
+    }
+
     $heatmapData[(int)$ii['id']]=$m;
 }
+unset($ii);
 
 $detailId=(int)($_GET['detail']??0);
 $detail=null;$rows=[];
@@ -549,6 +621,40 @@ if($detailId){
    $st->execute([$detailId]);$rows=$st->fetchAll();
    $byMonth=[];
    foreach($rows as $rr){ $bulan=(int)date('n',strtotime($rr['periode'])); if((int)date('Y',strtotime($rr['periode']))===$year) $byMonth[$bulan]=$rr; }
+
+   if(in_array($detail['kode'],['IM-IT-01','IM-IT-02'],true)){
+       for($dm=1;$dm<=12;$dm++){
+           $auto=$downtimeAuto[$dm]??null;
+           if($auto===null) continue;
+
+           $target=$detail['target']!==null?(float)$detail['target']:null;
+           $arah=$detail['arah']??'sesuai_target';
+           $value=($detail['kode']==='IM-IT-01') ? $auto['availability'] : $auto['downtime_minutes'];
+           $status='belum_dinilai';
+           if($target!==null){
+               $ok=($arah==='turun') ? ($value<=$target) : (($arah==='naik') ? ($value>=$target) : ($value>=$target));
+               $status=$ok?'tercapai':'tidak_tercapai';
+           }
+
+           $period=sprintf('%04d-%02d-01',$year,$dm);
+           $existing=$byMonth[$dm]??[];
+           $daysInMonth=(int)$ds=new DateTime($period);
+           $monthEnd=(clone $ds)->modify('+1 month');
+           $hours=($monthEnd->getTimestamp()-$ds->getTimestamp())/3600;
+           $byMonth[$dm]=array_merge($existing,[
+               'periode'=>$period,
+               'periode_label'=>sprintf('%04d-%02d',$year,$dm),
+               'numerator'=>($detail['kode']==='IM-IT-01') ? round(($value/100)*$hours,4) : $auto['downtime_minutes'],
+               'denominator'=>($detail['kode']==='IM-IT-01') ? round($hours,4) : 0,
+               'capaian'=>$value,
+               'target_snapshot'=>$target,
+               'status'=>$status,
+               'analisis'=>$existing['analisis']??'',
+               'tindak_lanjut'=>$existing['tindak_lanjut']??''
+           ]);
+       }
+   }
+
    $buktiByCapaian=[];
    if($rows){ $ids=array_map(fn($r)=>(int)$r['id'],$rows); $ph=implode(',',array_fill(0,count($ids),'?')); $bs=$pdo->prepare("SELECT * FROM mutu_bukti WHERE capaian_id IN ($ph) ORDER BY created_at DESC"); $bs->execute($ids); foreach($bs as $b)$buktiByCapaian[(int)$b['capaian_id']][]=$b; }
  }
