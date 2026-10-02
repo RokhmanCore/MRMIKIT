@@ -102,11 +102,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                 ON DUPLICATE KEY UPDATE numerator=VALUES(numerator),denominator=VALUES(denominator),capaian=VALUES(capaian),
                 target_snapshot=VALUES(target_snapshot),status=VALUES(status),updated_at=CURRENT_TIMESTAMP");
 
-            // Sinkronisasi IM-IT-01: hapus hasil otomatis lama lalu bangun hanya bulan
-            // yang benar-benar memiliki kejadian downtime. Bulan tanpa downtime tetap
-            // kosong/belum dinilai, bukan otomatis 100%.
-            $pdo->prepare("DELETE FROM mutu_capaian WHERE indikator_id=?")->execute([$indikator_id]);
-
+            // Sinkronisasi IM-IT-01 hanya memperbarui bulan yang benar-benar memiliki downtime.
+            // Pilihan "Tidak Ada Downtime" dan "Belum Ada Data" tidak dihapus oleh tombol ini.
             $hasil=0;
             for($bulan=1;$bulan<=12;$bulan++){
                 $start=new DateTime(sprintf('%04d-%02d-01 00:00:00',$tahun,$bulan));
@@ -147,7 +144,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                     round($cap,4),$target,'','',$status,$_SESSION['user']['id']??null]);
                 $hasil++;
             }
-            $msg="IM-IT-01 dibangun ulang hanya dari bulan yang memiliki catatan downtime. Bulan tanpa downtime dibiarkan kosong/belum dinilai. Bulan terhitung: {$hasil}.";
+            $msg="IM-IT-01 disinkronkan dari downtime. Hanya bulan yang memiliki kejadian downtime yang diperbarui: {$hasil} bulan.";
         }
 
         if ($action==='save_capaian_bulanan') {
