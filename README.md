@@ -48,3 +48,22 @@ Setelah itu buka:
 ### Catatan akreditasi
 
 Indikator yang disediakan sebagai awal adalah **template indikator internal IT**, bukan klaim bahwa target/angka tersebut merupakan indikator nasional. RS perlu menetapkan definisi operasional, target, metode pengukuran, PIC, periode, analisis, dan tindak lanjut sesuai kebijakan serta regulasi yang berlaku.
+
+### Ketersediaan SIMRS otomatis dari Downtime
+
+Untuk **IM-IT-01 Ketersediaan SIMRS**, aplikasi dapat menghitung capaian bulanan dari menu **Downtime**.
+
+Alur penggunaan:
+1. Buka **Downtime → Catat Downtime**.
+2. Catat waktu mulai dan selesai setiap kejadian yang benar-benar membuat SIMRS tidak dapat digunakan.
+3. Buka **Indikator Mutu IT → IM-IT-01 → Capaian**.
+4. Pilih tahun yang diperlukan.
+5. Klik **Hitung dari Downtime**.
+6. MRMIKIT menghitung otomatis total jam kalender, downtime, waktu tersedia, persentase ketersediaan, dan status terhadap target.
+7. Periksa kembali catatan downtime dan hasil per bulan sebelum digunakan sebagai laporan akreditasi.
+
+Rumus:
+
+**Ketersediaan SIMRS = (waktu yang seharusnya tersedia − downtime) ÷ waktu yang seharusnya tersedia × 100%**
+
+Catatan: fitur ini menggunakan catatan pada tabel `downtime`. Karena itu, hanya masukkan kejadian yang memang memengaruhi ketersediaan SIMRS agar hasil indikator dapat ditelusuri.
