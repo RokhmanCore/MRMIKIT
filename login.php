@@ -1,18 +1,282 @@
 <?php
 require_once __DIR__ . '/config/config.php';
-if (!empty($_SESSION['user'])) { header('Location: dashboard.php'); exit; }
+
+if (!empty($_SESSION['user'])) {
+    header('Location: dashboard.php');
+    exit;
+}
+
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';
+
     $st = $pdo->prepare('SELECT * FROM users WHERE username = ? AND aktif = 1 LIMIT 1');
     $st->execute([$username]);
     $user = $st->fetch();
+
     if ($user && password_verify($password, $user['password_hash'])) {
-        $_SESSION['user'] = ['id'=>$user['id'],'nama'=>$user['nama'],'username'=>$user['username'],'role'=>$user['role']];
-        header('Location: dashboard.php'); exit;
+        $_SESSION['user'] = [
+            'id' => $user['id'],
+            'nama' => $user['nama'],
+            'username' => $user['username'],
+            'role' => $user['role']
+        ];
+        header('Location: dashboard.php');
+        exit;
     }
+
     $error = 'Username atau password salah.';
 }
 ?>
-<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MRMIKIT - Login</title><link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"><style>body{background:#eef5f2}.login{max-width:430px;margin:8vh auto}.brand{font-weight:800;color:#0f6b4e}</style></head><body><div class="container"><div class="login"><div class="card shadow-sm border-0"><div class="card-body p-4"><h2 class="brand mb-1">MRMIKIT</h2><div class="text-muted mb-4">MRMIK IT · Akreditasi LARSI</div><?php if($error):?><div class="alert alert-danger"><?=htmlspecialchars($error)?></div><?php endif;?><form method="post"><label class="form-label">Username</label><input class="form-control mb-3" name="username" required><label class="form-label">Password</label><input class="form-control mb-3" type="password" name="password" required><button class="btn btn-success w-100">Masuk</button></form><div class="small text-muted mt-3">Akun awal: admin / admin123</div></div></div></div></div></body></html>
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Masuk · MRMIKIT</title>
+<style>
+:root{
+    --green:#087f5b;
+    --green-dark:#07563f;
+    --green-soft:#e8f6f0;
+    --ink:#17352c;
+    --muted:#6c817a;
+    --line:#dce9e4;
+}
+*{box-sizing:border-box}
+body{
+    margin:0;
+    min-height:100vh;
+    font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Arial,sans-serif;
+    color:var(--ink);
+    background:
+      radial-gradient(circle at 12% 12%,rgba(40,180,130,.16),transparent 28%),
+      radial-gradient(circle at 88% 88%,rgba(14,120,87,.12),transparent 30%),
+      linear-gradient(135deg,#f7fbf9 0%,#eef7f3 48%,#e7f3ee 100%);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:28px 18px;
+}
+.login-shell{
+    width:min(960px,100%);
+    min-height:570px;
+    display:grid;
+    grid-template-columns:46% 54%;
+    overflow:hidden;
+    border:1px solid rgba(255,255,255,.9);
+    border-radius:28px;
+    background:rgba(255,255,255,.94);
+    box-shadow:0 24px 70px rgba(18,73,57,.15),0 3px 12px rgba(18,73,57,.06);
+}
+.brand-panel{
+    position:relative;
+    padding:48px;
+    color:#fff;
+    background:
+      radial-gradient(circle at 78% 20%,rgba(255,255,255,.18),transparent 22%),
+      radial-gradient(circle at 15% 90%,rgba(255,255,255,.10),transparent 28%),
+      linear-gradient(145deg,#064d3a,#087f5b 58%,#139b6d);
+    display:flex;
+    flex-direction:column;
+    justify-content:space-between;
+}
+.brand-panel:after{
+    content:"";
+    position:absolute;
+    width:230px;height:230px;
+    right:-90px;bottom:-95px;
+    border:35px solid rgba(255,255,255,.08);
+    border-radius:50%;
+}
+.logo-mark{
+    width:62px;height:62px;
+    display:grid;place-items:center;
+    border-radius:18px;
+    background:rgba(255,255,255,.14);
+    border:1px solid rgba(255,255,255,.2);
+    box-shadow:inset 0 1px rgba(255,255,255,.18);
+    font-size:29px;
+    font-weight:800;
+    letter-spacing:-2px;
+}
+.brand-panel h1{
+    margin:22px 0 8px;
+    font-size:42px;
+    line-height:1;
+    letter-spacing:-1.8px;
+}
+.brand-panel .tagline{
+    max-width:330px;
+    margin:0;
+    color:rgba(255,255,255,.82);
+    font-size:15px;
+    line-height:1.7;
+}
+.brand-footer{
+    color:rgba(255,255,255,.7);
+    font-size:12px;
+}
+.form-panel{
+    padding:58px 64px;
+    display:flex;
+    align-items:center;
+}
+.form-wrap{width:100%;max-width:420px;margin:auto}
+.eyebrow{
+    display:inline-flex;
+    align-items:center;
+    gap:7px;
+    color:var(--green);
+    font-size:12px;
+    font-weight:800;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    margin-bottom:10px;
+}
+.eyebrow:before{
+    content:"";
+    width:22px;height:3px;
+    border-radius:10px;
+    background:var(--green);
+}
+.form-wrap h2{
+    margin:0;
+    font-size:31px;
+    letter-spacing:-.8px;
+}
+.subtitle{
+    margin:8px 0 30px;
+    color:var(--muted);
+    font-size:14px;
+}
+.alert{
+    padding:12px 14px;
+    margin-bottom:18px;
+    border-radius:12px;
+    color:#a52b38;
+    background:#fff0f1;
+    border:1px solid #ffd2d6;
+    font-size:13px;
+}
+.field{margin-bottom:19px}
+.field label{
+    display:block;
+    margin-bottom:8px;
+    font-size:13px;
+    font-weight:700;
+}
+.input-wrap{position:relative}
+.input-wrap .icon{
+    position:absolute;
+    left:15px;top:50%;
+    transform:translateY(-50%);
+    color:#7d948c;
+    pointer-events:none;
+}
+.form-control{
+    width:100%;
+    height:50px;
+    border:1px solid var(--line);
+    border-radius:13px;
+    outline:0;
+    padding:0 15px 0 43px;
+    background:#fbfdfc;
+    color:var(--ink);
+    font-size:14px;
+    transition:.18s ease;
+}
+.form-control:focus{
+    background:#fff;
+    border-color:#48a985;
+    box-shadow:0 0 0 4px rgba(18,155,109,.10);
+}
+.btn-login{
+    width:100%;
+    height:52px;
+    border:0;
+    border-radius:13px;
+    margin-top:4px;
+    color:#fff;
+    background:linear-gradient(135deg,#087f5b,#0a9b6b);
+    font-size:14px;
+    font-weight:800;
+    cursor:pointer;
+    box-shadow:0 9px 22px rgba(8,127,91,.22);
+    transition:.18s ease;
+}
+.btn-login:hover{
+    transform:translateY(-1px);
+    box-shadow:0 12px 26px rgba(8,127,91,.28);
+}
+.help{
+    margin-top:23px;
+    text-align:center;
+    color:#8a9b95;
+    font-size:12px;
+}
+@media(max-width:760px){
+    body{padding:14px}
+    .login-shell{
+        min-height:auto;
+        grid-template-columns:1fr;
+        border-radius:22px;
+    }
+    .brand-panel{
+        min-height:235px;
+        padding:30px;
+    }
+    .brand-panel h1{font-size:32px}
+    .brand-footer{margin-top:35px}
+    .form-panel{padding:38px 28px 42px}
+}
+</style>
+</head>
+<body>
+<main class="login-shell">
+    <section class="brand-panel">
+        <div>
+            <div class="logo-mark">M<span style="font-size:.65em">K</span></div>
+            <h1>MRMIKIT</h1>
+            <p class="tagline">Sistem manajemen dokumen dan indikator mutu untuk mendukung pengelolaan MRMIK IT dan persiapan akreditasi LARSI.</p>
+        </div>
+        <div class="brand-footer">RSU Permata Medika Kebumen · MRMIK IT</div>
+    </section>
+
+    <section class="form-panel">
+        <div class="form-wrap">
+            <div class="eyebrow">Secure access</div>
+            <h2>Selamat datang kembali</h2>
+            <p class="subtitle">Masuk untuk melanjutkan ke dashboard MRMIKIT.</p>
+
+            <?php if ($error): ?>
+                <div class="alert"><?=htmlspecialchars($error)?></div>
+            <?php endif; ?>
+
+            <form method="post" autocomplete="on">
+                <div class="field">
+                    <label for="username">Username</label>
+                    <div class="input-wrap">
+                        <span class="icon">◉</span>
+                        <input id="username" class="form-control" name="username" autocomplete="username" placeholder="Masukkan username" required autofocus>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label for="password">Password</label>
+                    <div class="input-wrap">
+                        <span class="icon">◆</span>
+                        <input id="password" class="form-control" type="password" name="password" autocomplete="current-password" placeholder="Masukkan password" required>
+                    </div>
+                </div>
+
+                <button class="btn-login" type="submit">Masuk ke MRMIKIT&nbsp; →</button>
+            </form>
+
+            <div class="help">Akses sistem internal · Data dilindungi dengan autentikasi pengguna</div>
+        </div>
+    </section>
+</main>
+</body>
+</html>
