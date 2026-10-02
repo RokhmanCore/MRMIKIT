@@ -100,6 +100,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 )->execute([$fileCount, $batchId]);
 
                                 $pdo->commit();
+
+                                // Penanda lokal agar arsip dapat ditemukan kembali untuk download per dokumen.
+                                @file_put_contents(
+                                    $dir . '/batch.json',
+                                    json_encode([
+                                        'batch_id' => $batchId,
+                                        'filename_zip' => $_FILES['zip']['name'],
+                                        'created_at' => date('c')
+                                    ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)
+                                );
+
                                 $zip->close();
 
                                 header('Location: mapping.php?id=' . $batchId);
