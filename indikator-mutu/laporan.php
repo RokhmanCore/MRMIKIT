@@ -158,7 +158,7 @@ $colors=['tercapai'=>'#198754','tidak_tercapai'=>'#dc3545','perlu_perhatian'=>'#
 
 <h2>4. Tabel Capaian 12 Bulan</h2>
 <table><thead><tr><th>Bulan</th><th>N</th><th>D</th><th>Capaian</th><th>Target</th><th>Status</th><th>Analisis / RTL</th></tr></thead><tbody>
-<?php for($m=1;$m<=12;$m++):$r=$reportMonths[$m];$s=$r['status']??'belum_dinilai';?><tr><td><strong><?=h($monthNames[$m-1])?></strong></td><td><?=$r?h($r['numerator']??'—'):'—'?></td><td><?=$r?h($r['denominator']??'—'):'—'?></td><td><?=$r&&$r['capaian']!==null?h(fmt($r['capaian'],2).' '.$i['satuan']):'—'?></td><td><?=h($r['target_snapshot']??$i['target']??'—')?></td><td class="<?=$s==='tercapai'?'ok':($s==='tidak_tercapai'?'bad':($s==='perlu_perhatian'?'warn':'empty'))?>"><?=h(strtoupper(str_replace('_',' ',$s)))?></td><td><?=$r?h(trim(($r['analisis']??'').' | '.($r['tindak_lanjut']??'')):'—')?></td></tr><?php endfor;?></tbody></table>
+<?php for($m=1;$m<=12;$m++): $r=$reportMonths[$m]??null; $s=$r['status']??'belum_dinilai'; ?><tr><td><strong><?=h($monthNames[$m-1])?></strong></td><td><?= $r ? h($r['numerator']??'—') : '—' ?></td><td><?= $r ? h($r['denominator']??'—') : '—' ?></td><td><?= ($r && $r['capaian']!==null) ? h(fmt($r['capaian'],2).' '.$i['satuan']) : '—' ?></td><td><?=h($r['target_snapshot']??$i['target']??'—')?></td><td class="<?=$s==='tercapai'?'ok':($s==='tidak_tercapai'?'bad':($s==='perlu_perhatian'?'warn':'empty'))?>"><?=h(strtoupper(str_replace('_',' ',$s)))?></td><td><?= $r ? h(trim(($r['analisis']??'').' | '.($r['tindak_lanjut']??''))) : '—' ?></td></tr><?php endfor;?></tbody></table>
 
 <?php if(in_array($i['kode'],['IM-IT-01','IM-IT-02'],true)): ?>
 <h2>5. Rincian Sumber Data Downtime SIMRS</h2>
