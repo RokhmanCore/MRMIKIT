@@ -3,6 +3,24 @@ require_once __DIR__.'/../config/config.php';
 require_once __DIR__.'/../config/auth.php';
 require_login();
 
+
+
+/* Pastikan tabel IM-IT-03 tersedia sebelum SELECT halaman detail. */
+$pdo->exec("CREATE TABLE IF NOT EXISTS mutu_backup_harian (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    indikator_id INT NOT NULL,
+    periode DATE NOT NULL,
+    dijadwalkan INT NOT NULL DEFAULT 0,
+    berhasil INT NOT NULL DEFAULT 0,
+    gagal INT NOT NULL DEFAULT 0,
+    catatan TEXT NULL,
+    created_by INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_backup_periode (indikator_id, periode),
+    INDEX idx_backup_indikator_periode (indikator_id, periode)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
 $page_title='Indikator Mutu IT';
 $msg=''; $err='';
 
