@@ -154,10 +154,14 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             $indikator_id=(int)($_POST['indikator_id']??0);
             $tahun=(int)($_POST['tahun']??date('Y'));
             if($indikator_id<1 || $tahun<2020 || $tahun>2100) throw new RuntimeException('Indikator atau tahun tidak valid.');
-            $st=$pdo->prepare("SELECT arah,target FROM mutu_indikator WHERE id=?");
+            $st=$pdo->prepare("SELECT * FROM mutu_indikator WHERE id=?");
             $st->execute([$indikator_id]); $ind=$st->fetch();
             if(!$ind) throw new RuntimeException('Indikator tidak ditemukan.');
             $rowsPost=$_POST['bulanan']??[];
+            $events=[];
+            if($ind['kode']==='IM-IT-01'){
+                $events=$pdo->query("SELECT mulai,selesai FROM downtime WHERE selesai IS NOT NULL AND selesai>mulai ORDER BY mulai")->fetchAll();
+            }
             $sql=$pdo->prepare("INSERT INTO mutu_capaian
                 (indikator_id,periode,numerator,denominator,capaian,target_snapshot,analisis,tindak_lanjut,status,created_by)
                 VALUES (?,?,?,?,?,?,?,?,?,?)
@@ -167,9 +171,53 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             $tersimpan=0;
             for($bulan=1;$bulan<=12;$bulan++){
                 $r=is_array($rowsPost[$bulan]??null)?$rowsPost[$bulan]:[];
+                $kondisi=trim((string)($r['kondisi']??''));
                 $num=trim((string)($r['numerator']??'')); $den=trim((string)($r['denominator']??''));
                 $cap=trim((string)($r['capaian']??'')); $target=trim((string)($r['target']??''));
                 $analisis=trim((string)($r['analisis']??'')); $rtl=trim((string)($r['tindak_lanjut']??''));
+
+                if($ind['kode']==='IM-IT-01'){
+                    $periode=sprintf('%04d-%02d-01',$tahun,$bulan);
+                    if($kondisi==='belum_ada_data'){
+                        $pdo->prepare("DELETE FROM mutu_capaian WHERE indikator_id=? AND periode=?")->execute([$indikator_id,$periode]);
+                        continue;
+                    }
+                    $start=new DateTime(sprintf('%04d-%02d-01 00:00:00',$tahun,$bulan));
+                    $end=(clone $start)->modify('+1 month');
+                    $totalSeconds=$end->getTimestamp()-$start->getTimestamp();
+                    $targetVal=($target!=='')?(float)$target:($ind['target']!==null?(float)$ind['target']:null);
+
+                    if($kondisi==='tidak_ada_downtime'){
+                        $hours=$totalSeconds/3600; $capVal=100.0;
+                        $status=$targetVal===null?'belum_dinilai':($capVal >= $targetVal?'tercapai':'tidak_tercapai');
+                        $sql->execute([$indikator_id,$periode,$hours,$hours,$capVal,$targetVal,$analisis,$rtl,$status,$_SESSION['user']['id']??null]);
+                        $tersimpan++; continue;
+                    }
+
+                    if($kondisi==='ada_downtime'){
+                        $intervals=[];
+                        foreach($events as $ev){
+                            $ds=new DateTime($ev['mulai']); $de=new DateTime($ev['selesai']);
+                            $cs=$ds>$start?$ds:$start; $ce=$de<$end?$de:$end;
+                            if($ce>$cs) $intervals[]=[$cs->getTimestamp(),$ce->getTimestamp()];
+                        }
+                        usort($intervals,fn($a,$b)=>$a[0]<=>$b[0]);
+                        $merged=[];
+                        foreach($intervals as $iv){
+                            if(!$merged || $iv[0]>$merged[count($merged)-1][1]) $merged[]=$iv;
+                            else $merged[count($merged)-1][1]=max($merged[count($merged)-1][1],$iv[1]);
+                        }
+                        if(!$merged) throw new RuntimeException("Bulan {$bulan}/{$tahun} dipilih 'Ada Downtime', tetapi belum ada kejadian downtime yang selesai pada bulan tersebut.");
+                        $downSeconds=0; foreach($merged as $iv) $downSeconds += $iv[1]-$iv[0];
+                        $totalHours=$totalSeconds/3600; $availableHours=max(0,$totalHours-($downSeconds/3600));
+                        $capVal=$totalHours>0?($availableHours/$totalHours)*100:0;
+                        $status=$targetVal===null?'belum_dinilai':($capVal >= $targetVal?'tercapai':'tidak_tercapai');
+                        $sql->execute([$indikator_id,$periode,round($availableHours,4),round($totalHours,4),round($capVal,4),$targetVal,$analisis,$rtl,$status,$_SESSION['user']['id']??null]);
+                        $tersimpan++; continue;
+                    }
+                    continue;
+                }
+
                 if($num==='' && $den==='' && $cap==='' && $target==='' && $analisis==='' && $rtl==='') continue;
                 $numVal=($num!=='')?(float)$num:null; $denVal=($den!=='')?(float)$den:null; $capVal=($cap!=='')?(float)$cap:null;
                 $targetVal=($target!=='')?(float)$target:($ind['target']!==null?(float)$ind['target']:null);
@@ -420,13 +468,13 @@ require __DIR__.'/../partials/header.php';
    </form>
   </div>
  </div>
- <div class="alert alert-warning mt-3 mb-0 small">Gunakan menu <strong>Downtime</strong> hanya untuk kejadian yang memang memengaruhi ketersediaan SIMRS. Contoh: server/aplikasi/database SIMRS tidak dapat digunakan. Jangan memasukkan gangguan lain yang tidak memengaruhi SIMRS.</div>
+ <div class="alert alert-warning mt-3 mb-0 small">Untuk <strong>Ada Downtime</strong>, catat semua kejadian di menu <strong>Downtime</strong>. Untuk <strong>Tidak Ada Downtime</strong>, pilih hanya setelah diverifikasi dengan bukti monitoring/log/laporan IT. <strong>Belum Ada Data</strong> dibiarkan kosong.</div>
 </div></div>
 <?php endif; ?>
 
 <div class="card shadow-sm mb-4"><div class="card-body">
  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-  <div><h6 class="mb-1">Input Capaian 12 Bulan <?=h($year)?></h6><div class="small text-muted">Isi Numerator dan Denominator. Capaian dihitung otomatis jika keduanya diisi. Baris kosong tidak disimpan.</div></div>
+  <div><h6 class="mb-1">Input Capaian 12 Bulan <?=h($year)?></h6><div class="small text-muted">Untuk IM-IT-01 pilih kondisi setiap bulan: <strong>Ada Downtime</strong>, <strong>Tidak Ada Downtime</strong>, atau <strong>Belum Ada Data</strong>. N/D dan capaian dihitung otomatis.</div></div>
   <button type="submit" form="formCapaian12" class="btn btn-success">💾 Simpan Semua Capaian</button>
  </div>
  <form method="post" id="formCapaian12">
@@ -435,20 +483,34 @@ require __DIR__.'/../partials/header.php';
   <input type="hidden" name="tahun" value="<?=$year?>">
   <div class="table-responsive mt-3">
    <table class="table table-bordered table-sm align-middle monthly-input-table">
-    <thead><tr><th>Bulan</th><th>N</th><th>D</th><th>Capaian</th><th>Target</th><th>Status</th><th>Analisis</th><th>Tindak lanjut</th></tr></thead>
+    <thead><tr><th>Bulan</th><?php if(($detail['kode']??'')==='IM-IT-01'): ?><th>Kondisi</th><?php endif; ?><th>N</th><th>D</th><th>Capaian</th><th>Target</th><th>Status</th><th>Analisis</th><th>Tindak lanjut</th></tr></thead>
     <tbody>
-    <?php for($mm=1;$mm<=12;$mm++): $rr=$byMonth[$mm]??null; $ss=$rr['status']??'belum_dinilai'; ?>
-    <tr class="<?=($ss==='tercapai'?'table-success':($ss==='tidak_tercapai'?'table-danger':''))?>">
-      <td><strong><?=h($monthNames[$mm-1])?></strong><div class="small text-muted"><?=$year?>-<?=str_pad($mm,2,'0',STR_PAD_LEFT)?></div></td>
-      <td><input type="number" step="0.0001" class="form-control form-control-sm month-num" name="bulanan[<?=$mm?>][numerator]" value="<?=h($rr['numerator']??'')?>" placeholder="N"></td>
-      <td><input type="number" step="0.0001" class="form-control form-control-sm month-den" name="bulanan[<?=$mm?>][denominator]" value="<?=h($rr['denominator']??'')?>" placeholder="D"></td>
-      <td><input type="number" step="0.0001" class="form-control form-control-sm month-cap" name="bulanan[<?=$mm?>][capaian]" value="<?=h($rr['capaian']??'')?>" placeholder="otomatis"></td>
-      <td><input type="number" step="0.0001" class="form-control form-control-sm" name="bulanan[<?=$mm?>][target]" value="<?=h($rr['target_snapshot']??$detail['target']??'')?>"></td>
-      <td><span class="status-pill <?=($ss==='tercapai'?'status-tercapai':($ss==='tidak_tercapai'?'status-tidak':($ss==='perlu_perhatian'?'status-perhatian':'status-belum')))?>"><?=h(strtoupper(str_replace('_',' ',$ss)))?></span></td>
-      <td><input type="text" class="form-control form-control-sm" name="bulanan[<?=$mm?>][analisis]" value="<?=h($rr['analisis']??'')?>" placeholder="Analisis singkat"></td>
-      <td><input type="text" class="form-control form-control-sm" name="bulanan[<?=$mm?>][tindak_lanjut]" value="<?=h($rr['tindak_lanjut']??'')?>" placeholder="RTL"></td>
-    </tr>
-    <?php endfor; ?>
+     <?php for($mm=1;$mm<=12;$mm++): $rr=$byMonth[$mm]??null; $ss=$rr['status']??'belum_dinilai'; ?>
+     <?php
+       $kondisiLama='';
+       if(($detail['kode']??'')==='IM-IT-01' && $rr){
+         $hasData=($rr['capaian']!==null || $rr['numerator']!==null || $rr['denominator']!==null);
+         if($hasData) $kondisiLama=(abs((float)$rr['capaian']-100)<0.0001 && abs((float)$rr['numerator']-(float)$rr['denominator'])<0.0001) ? 'tidak_ada_downtime' : 'ada_downtime';
+       }
+     ?>
+     <tr class="<?=($ss==='tercapai'?'table-success':($ss==='tidak_tercapai'?'table-danger':''))?>">
+       <td><strong><?=h($monthNames[$mm-1])?></strong><div class="small text-muted"><?=$year?>-<?=str_pad($mm,2,'0',STR_PAD_LEFT)?></div></td>
+       <?php if(($detail['kode']??'')==='IM-IT-01'): ?>
+       <td><select class="form-select form-select-sm" name="bulanan[<?=$mm?>][kondisi]">
+         <option value="" <?=$kondisiLama===''?'selected':''?>>-- pilih kondisi --</option>
+         <option value="ada_downtime" <?=$kondisiLama==='ada_downtime'?'selected':''?>>🔴 Ada Downtime</option>
+         <option value="tidak_ada_downtime" <?=$kondisiLama==='tidak_ada_downtime'?'selected':''?>>🟢 Tidak Ada Downtime</option>
+         <option value="belum_ada_data">⚪ Belum Ada Data</option>
+       </select></td>
+       <?php endif; ?>
+       <td><input type="number" step="0.0001" class="form-control form-control-sm month-num" name="bulanan[<?=$mm?>][numerator]" value="<?=h($rr['numerator']??'')?>" placeholder="otomatis"></td>
+       <td><input type="number" step="0.0001" class="form-control form-control-sm month-den" name="bulanan[<?=$mm?>][denominator]" value="<?=h($rr['denominator']??'')?>" placeholder="otomatis"></td>
+       <td><input type="number" step="0.0001" class="form-control form-control-sm month-cap" name="bulanan[<?=$mm?>][capaian]" value="<?=h($rr['capaian']??'')?>" placeholder="otomatis"></td>
+       <td><input type="number" step="0.0001" class="form-control form-control-sm" name="bulanan[<?=$mm?>][target]" value="<?=h($rr['target_snapshot']??$detail['target']??'')?>"></td>
+       <td><span class="status-pill <?=($ss==='tercapai'?'status-tercapai':($ss==='tidak_tercapai'?'status-tidak':($ss==='perlu_perhatian'?'status-perhatian':'status-belum')))?>"><?=h(strtoupper(str_replace('_',' ',$ss)))?></span></td>
+       <td><input type="text" class="form-control form-control-sm" name="bulanan[<?=$mm?>][analisis]" value="<?=h($rr['analisis']??'')?>" placeholder="Analisis singkat"></td>
+       <td><input type="text" class="form-control form-control-sm" name="bulanan[<?=$mm?>][tindak_lanjut]" value="<?=h($rr['tindak_lanjut']??'')?>" placeholder="RTL"></td>
+     </tr>
     </tbody>
    </table>
   </div>
