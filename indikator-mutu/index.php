@@ -20,6 +20,23 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS mutu_backup_harian (
     UNIQUE KEY uq_backup_periode (indikator_id, periode),
     INDEX idx_backup_indikator_periode (indikator_id, periode)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+/* Bukti perwakilan IM-IT-03: satu bukti offline dan satu bukti online per tahun. */
+$pdo->exec("CREATE TABLE IF NOT EXISTS mutu_backup_bukti (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    indikator_id INT NOT NULL,
+    tahun YEAR NOT NULL,
+    jenis ENUM('offline','online') NOT NULL,
+    nama_file VARCHAR(255) NOT NULL,
+    original_name VARCHAR(255) NOT NULL,
+    mime_type VARCHAR(120) NULL,
+    size_bytes BIGINT NOT NULL DEFAULT 0,
+    catatan TEXT NULL,
+    uploaded_by INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_backup_bukti (indikator_id,tahun,jenis),
+    INDEX idx_backup_bukti_indikator (indikator_id,tahun)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
 $page_title='Indikator Mutu IT';
 $msg=''; $err='';
@@ -524,6 +541,34 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             $msg="Data backup {$saved} bulan berhasil disimpan. Struktur sudah disiapkan untuk sumber otomatis dari Task Scheduler.";
         }
 
+        if ($action==='upload_backup_evidence') {
+            $indikator_id=(int)($_POST['indikator_id']??0);
+            $tahun=(int)($_POST['tahun']??date('Y'));
+            $jenis=$_POST['jenis']??'';
+            if($indikator_id<1 || $tahun<2020 || $tahun>2100 || !in_array($jenis,['offline','online'],true)) throw new RuntimeException('Data bukti backup tidak valid.');
+            $st=$pdo->prepare("SELECT id,kode FROM mutu_indikator WHERE id=?");
+            $st->execute([$indikator_id]);$ind=$st->fetch();
+            if(!$ind || $ind['kode']!=='IM-IT-03') throw new RuntimeException('Bukti ini khusus IM-IT-03.');
+            if(empty($_FILES['backup_evidence']) || $_FILES['backup_evidence']['error']!==UPLOAD_ERR_OK) throw new RuntimeException('File bukti belum dipilih atau gagal diunggah.');
+            $f=$_FILES['backup_evidence'];
+            if($f['size']>20*1024*1024) throw new RuntimeException('Ukuran file maksimal 20 MB.');
+            $allowed=['pdf','jpg','jpeg','png'];
+            $ext=strtolower(pathinfo($f['name'],PATHINFO_EXTENSION));
+            if(!in_array($ext,$allowed,true)) throw new RuntimeException('Bukti gunakan PDF, JPG, JPEG atau PNG.');
+            $dir=__DIR__.'/../uploads/mutu-indikator/backup-evidence';
+            if(!is_dir($dir) && !mkdir($dir,0775,true) && !is_dir($dir)) throw new RuntimeException('Folder bukti backup tidak dapat dibuat.');
+            $oldSt=$pdo->prepare("SELECT nama_file FROM mutu_backup_bukti WHERE indikator_id=? AND tahun=? AND jenis=?");
+            $oldSt->execute([$indikator_id,$tahun,$jenis]);$old=$oldSt->fetch();
+            $safe=bin2hex(random_bytes(8)).'_'.preg_replace('/[^A-Za-z0-9._-]/','_',basename($f['name']));
+            $dest=$dir.'/'.$safe;
+            if(!move_uploaded_file($f['tmp_name'],$dest)) throw new RuntimeException('File bukti gagal disimpan.');
+            $note=trim($_POST['catatan_bukti_backup']??'');
+            $up=$pdo->prepare("INSERT INTO mutu_backup_bukti(indikator_id,tahun,jenis,nama_file,original_name,mime_type,size_bytes,catatan,uploaded_by) VALUES(?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE nama_file=VALUES(nama_file),original_name=VALUES(original_name),mime_type=VALUES(mime_type),size_bytes=VALUES(size_bytes),catatan=VALUES(catatan),uploaded_by=VALUES(uploaded_by),updated_at=CURRENT_TIMESTAMP");
+            $up->execute([$indikator_id,$tahun,$jenis,$safe,$f['name'],$f['type']??'',(int)$f['size'],$note,$_SESSION['user']['id']??null]);
+            if($old && !empty($old['nama_file'])) @unlink($dir.'/'.$old['nama_file']);
+            $msg='Bukti backup '.ucfirst($jenis).' berhasil disimpan untuk laporan tahun '.$tahun.'.';
+        }
+
         if ($action==='upload_bukti') {
             $capaian_id=(int)($_POST['capaian_id']??0);
             if (!$capaian_id || empty($_FILES['bukti_file']) || $_FILES['bukti_file']['error']!==UPLOAD_ERR_OK) {
@@ -699,6 +744,13 @@ if($detailId){
        $bst=$pdo->prepare("SELECT * FROM mutu_backup_harian WHERE indikator_id=? AND YEAR(periode)=? ORDER BY periode");
        $bst->execute([$detailId,$year]);
        foreach($bst as $br) $backupByMonth[(int)date('n',strtotime($br['periode']))]=$br;
+   }
+
+   $backupEvidence=[];
+   if($detail['kode']==='IM-IT-03'){
+       $est=$pdo->prepare("SELECT * FROM mutu_backup_bukti WHERE indikator_id=? AND tahun=? ORDER BY FIELD(jenis,'offline','online')");
+       $est->execute([$detailId,$year]);
+       $backupEvidence=$est->fetchAll();
    }
 
    if(in_array($detail['kode'],['IM-IT-01','IM-IT-02'],true)){
@@ -940,7 +992,7 @@ require __DIR__.'/../partials/header.php';
 <div class="card border-success shadow-sm mb-4"><div class="card-body">
  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div><h5 class="mb-1">💾 Rekap Backup Harian SIMRS</h5>
-   <div class="small text-muted">Tahap 1: input rekap langsung di MRMIKIT. Sumber bukti: Windows Task Scheduler 03.00, log task, dan file backup. Struktur tabel sudah disiapkan agar tahap berikutnya dapat membaca data otomatis.</div>
+   <div class="small text-muted">Rekap bulanan diinput di MRMIKIT. Bukti cukup perwakilan: satu untuk backup offline dan satu untuk backup online. Sumber bukti: Windows Task Scheduler 03.00, log task, dan file backup. Struktur tabel disiapkan agar tahap berikutnya dapat membaca data otomatis.</div>
   </div>
   <span class="badge bg-success">IM-IT-03</span>
  </div>
@@ -976,6 +1028,36 @@ require __DIR__.'/../partials/header.php';
   <div class="alert alert-info small mb-3"><strong>Contoh:</strong> jika Januari dijadwalkan 31 kali, berhasil 31, gagal 0 → capaian 100%. Jangan mengisi berhasil 100% tanpa memeriksa bukti backup.</div>
   <button class="btn btn-success">💾 Simpan Rekap Backup</button>
  </form>
+
+ <div class="mt-4 p-3 border rounded bg-light">
+  <h6 class="mb-1">📎 Bukti Perwakilan Backup <?=h($year)?></h6>
+  <div class="small text-muted mb-3">Cukup satu bukti perwakilan untuk backup <strong>offline</strong> dan satu untuk <strong>online</strong>. Bukti ini dipakai kembali pada laporan/cetak PDF seluruh tahun, sehingga tidak perlu upload SS setiap hari.</div>
+  <div class="row g-3">
+   <?php foreach(['offline'=>'Backup Offline','online'=>'Backup Online'] as $jenisB=>$labelB): $eb=null; foreach($backupEvidence as $x){if($x['jenis']===$jenisB){$eb=$x;break;}} ?>
+   <div class="col-md-6">
+    <div class="border rounded p-3 h-100 bg-white">
+     <strong><?=h($labelB)?></strong>
+     <?php if($eb): ?>
+       <div class="small mt-2"><a href="download_backup_evidence.php?id=<?=$eb['id']?>" target="_blank">📄 <?=h($eb['original_name'])?></a></div>
+       <div class="small text-muted"><?=h($eb['catatan']??'')?></div>
+       <div class="small text-success mt-1">✓ Digunakan pada laporan tahun <?=h($year)?></div>
+     <?php else: ?>
+       <div class="small text-muted mt-2">Belum ada bukti.</div>
+     <?php endif; ?>
+     <form method="post" enctype="multipart/form-data" class="mt-2">
+      <input type="hidden" name="action" value="upload_backup_evidence">
+      <input type="hidden" name="indikator_id" value="<?=$detail['id']?>">
+      <input type="hidden" name="tahun" value="<?=$year?>">
+      <input type="hidden" name="jenis" value="<?=$jenisB?>">
+      <input type="file" name="backup_evidence" class="form-control form-control-sm mb-2" required accept=".pdf,.jpg,.jpeg,.png">
+      <input type="text" name="catatan_bukti_backup" value="<?=h($eb['catatan']??'')?>" class="form-control form-control-sm mb-2" placeholder="Contoh: SS Task Scheduler 03.00 dan hasil file backup tersedia">
+      <button class="btn btn-sm btn-outline-success">📎 <?= $eb?'Ganti bukti':'Upload bukti' ?></button>
+     </form>
+    </div>
+   </div>
+   <?php endforeach; ?>
+  </div>
+ </div>
 </div></div>
 <?php endif; ?>
 
