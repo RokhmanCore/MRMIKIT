@@ -327,7 +327,10 @@ require __DIR__.'/../partials/header.php';
 </div></div>
 <div class="card shadow-sm mb-4"><div class="card-body">
  <div class="d-flex justify-content-between align-items-center"><h6 class="mb-0">Grafik tren 12 bulan <?=h($year)?></h6><span class="small text-muted">Garis target = <?=h($detail['target']??'-')?> <?=h($detail['satuan'])?></span></div>
- <div class="chart-wrap mt-2"><canvas id=<div class="card shadow-sm mb-4"><div class="card-body">
+ <div class="chart-wrap mt-2"><canvas id="trendChart" aria-label="Grafik tren capaian 12 bulan"></canvas></div>
+</div></div>
+
+<div class="card shadow-sm mb-4"><div class="card-body">
  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div><h6 class="mb-1">Input Capaian 12 Bulan <?=h($year)?></h6><div class="small text-muted">Isi Numerator dan Denominator. Capaian dihitung otomatis jika keduanya diisi. Baris kosong tidak disimpan.</div></div>
   <button type="submit" form="formCapaian12" class="btn btn-success">💾 Simpan Semua Capaian</button>
@@ -358,11 +361,27 @@ require __DIR__.'/../partials/header.php';
  </form>
 </div></div>
 
-<div class="card shadow-sm mb-4"><div class="card-body"><h6>Tabel capaian 12 bulan <?=h($year)?></h6>
-<div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Bulan</th><th>Numerator</th><th>Denominator</th><th>Capaian</th><th>Target</th><th>Status</th><th>Analisis / RTL</th></tr></thead><tbody>
-<?php for($mm=1;$mm<=12;$mm++):$rr=$byMonth[$mm]??null;$ss=$rr['status']??'belum_dinilai';?>
-<tr><td><strong><?=h($monthNames[$mm-1])?></strong></td><td><?=$rr?h($rr['numerator']):'—'?></td><td><?=$rr?h($rr['denominator']):'—'?></td><td><strong><?=$rr&&$rr['capaian']!==null?h(round((float)$rr['capaian'],2).' '.$detail['satuan']):'—'?></strong></td><td><?=$rr?h($rr['target_snapshot']):h($detail['target']??'—')?></td><td><span class="status-pill <?=($ss==='tercapai'?'status-tercapai':($ss==='tidak_tercapai'?'status-tidak':($ss==='perlu_perhatian'?'status-perhatian':'status-belum')))?>"><?=h(strtoupper(str_replace('_',' ',$ss)))?></span></td><td><?=$rr?h(($rr['analisis']??'').' '.($rr['tindak_lanjut']??'')):'—'?></td></tr>
-<?php endfor;?></tbody></table></div></div></div>
+<div class="card shadow-sm mb-4"><div class="card-body">
+ <h6>Tabel Capaian 12 Bulan <?=h($year)?></h6>
+ <div class="table-responsive">
+  <table class="table table-sm align-middle">
+   <thead><tr><th>Bulan</th><th>Numerator</th><th>Denominator</th><th>Capaian</th><th>Target</th><th>Status</th><th>Analisis / RTL</th></tr></thead>
+   <tbody>
+   <?php for($mm=1;$mm<=12;$mm++): $rr=$byMonth[$mm]??null; $ss=$rr['status']??'belum_dinilai'; ?>
+   <tr>
+    <td><strong><?=h($monthNames[$mm-1])?></strong></td>
+    <td><?=$rr?h($rr['numerator']):'—'?></td>
+    <td><?=$rr?h($rr['denominator']):'—'?></td>
+    <td><strong><?=$rr&&$rr['capaian']!==null?h(round((float)$rr['capaian'],2).' '.$detail['satuan']):'—'?></strong></td>
+    <td><?=$rr?h($rr['target_snapshot']):h($detail['target']??'—')?></td>
+    <td><span class="status-pill <?=($ss==='tercapai'?'status-tercapai':($ss==='tidak_tercapai'?'status-tidak':($ss==='perlu_perhatian'?'status-perhatian':'status-belum')))?>"><?=h(strtoupper(str_replace('_',' ',$ss)))?></span></td>
+    <td><?=$rr?h(trim(($rr['analisis']??'').' '.($rr['tindak_lanjut']??'')):'—')?></td>
+   </tr>
+   <?php endfor; ?>
+   </tbody>
+  </table>
+ </div>
+</div></div>
 <div class="table-responsive"><table class="table align-middle"><thead><tr><th>Periode</th><th>N</th><th>D</th><th>Capaian</th><th>Target</th><th>Status</th><th>Analisis / Tindak lanjut</th><th>Aksi</th><th>Bukti</th></tr></thead><tbody>
 <?php foreach($rows as $r):$s=$r['status'];?><tr><td><?=h($r['periode_label'])?></td><td><?=h($r['numerator'])?></td><td><?=h($r['denominator'])?></td><td><strong><?= $r['capaian']!==null?h(round((float)$r['capaian'],2).' '.$detail['satuan']):'-'?></strong></td><td><?=h($r['target_snapshot'])?></td><td><span class="status-pill <?=($s==='tercapai'?'status-tercapai':($s==='tidak_tercapai'?'status-tidak':'status-belum'))?>"><?=h(strtoupper(str_replace('_',' ',$s)))?></span></td><td><div><?=h($r['analisis']??'-')?></div><small class="text-muted"><?=h($r['tindak_lanjut']??'')?></small></td>
 <td class="text-nowrap">
@@ -398,17 +417,13 @@ require __DIR__.'/../partials/header.php';
  const dpr=window.devicePixelRatio||1;
  function draw(){
    const w=canvas.clientWidth||900,h=canvas.clientHeight||310;
-   canvas.width=w*dpr;canvas.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
-   ctx.clearRect(0,0,w,h);
-   const pad={l:48,r:18,t:22,b:42},pw=w-pad.l-pad.r,ph=h-pad.t-pad.b;
-   const vals=data.filter(v=>v!==null);
+   canvas.width=w*dpr;canvas.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
+   const pad={l:48,r:18,t:22,b:42},pw=w-pad.l-pad.r,ph=h-pad.t-pad.b,vals=data.filter(v=>v!==null);
    if(!vals.length){ctx.font='14px Arial';ctx.fillStyle='#6c757d';ctx.fillText('Belum ada capaian untuk tahun ini.',pad.l,pad.t+30);return;}
-   let min=Math.min(...vals,target??Infinity),max=Math.max(...vals,target??-Infinity);
-   if(!Number.isFinite(min))min=0;if(!Number.isFinite(max))max=100;
-   const range=Math.max(max-min,1);min-=range*.12;max+=range*.12;
-   const x=i=>pad.l+(pw*i/11), y=v=>pad.t+(max-v)*ph/(max-min);
+   let min=Math.min(...vals,target??Infinity),max=Math.max(...vals,target??-Infinity);if(!Number.isFinite(min))min=0;if(!Number.isFinite(max))max=100;
+   const rg=Math.max(max-min,1);min-=rg*.12;max+=rg*.12;const x=i=>pad.l+(pw*i/11),y=v=>pad.t+(max-v)*ph/(max-min);
    ctx.strokeStyle='#e9ecef';ctx.lineWidth=1;
-   for(let g=0;g<=4;g++){const yy=pad.t+ph*g/4;ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(w-pad.r,yy);ctx.stroke();ctx.fillStyle='#6c757d';ctx.font='11px Arial';const val=max-(max-min)*g/4;ctx.fillText(val.toFixed(1),5,yy+4);}
+   for(let g=0;g<=4;g++){const yy=pad.t+ph*g/4;ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(w-pad.r,yy);ctx.stroke();ctx.fillStyle='#6c757d';ctx.font='11px Arial';ctx.fillText((max-(max-min)*g/4).toFixed(1),5,yy+4);}
    if(target!==null){ctx.strokeStyle='#dc3545';ctx.setLineDash([6,5]);ctx.beginPath();ctx.moveTo(pad.l,y(target));ctx.lineTo(w-pad.r,y(target));ctx.stroke();ctx.setLineDash([]);}
    ctx.strokeStyle='#198754';ctx.lineWidth=3;ctx.beginPath();let started=false;
    data.forEach((v,i)=>{if(v===null){started=false;return;}const xx=x(i),yy=y(v);if(!started){ctx.moveTo(xx,yy);started=true;}else ctx.lineTo(xx,yy);});ctx.stroke();
@@ -418,10 +433,10 @@ require __DIR__.'/../partials/header.php';
  draw();window.addEventListener('resize',draw);
 })();
 document.querySelectorAll('#formCapaian12 tr').forEach(function(row){
- const n=row.querySelector('.month-num'),d=row.querySelector('.month-den'),cap=row.querySelector('.month-cap');
- if(!n||!d||!cap)return;
- function calc(){if(n.value!==''&&d.value!==''&&Number(d.value)!==0){cap.value=(Number(n.value)/Number(d.value)*100).toFixed(4);}}
+ const n=row.querySelector('.month-num'),d=row.querySelector('.month-den'),cap=row.querySelector('.month-cap');if(!n||!d||!cap)return;
+ function calc(){if(n.value!==''&&d.value!==''&&Number(d.value)!==0)cap.value=(Number(n.value)/Number(d.value)*100).toFixed(4);}
  n.addEventListener('input',calc);d.addEventListener('input',calc);
 });
 </script>
+
 <?php require __DIR__.'/../partials/footer.php';
