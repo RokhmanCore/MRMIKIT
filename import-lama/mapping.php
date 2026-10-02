@@ -127,14 +127,68 @@ require __DIR__ . '/../partials/header.php';
     padding: 6px 9px;
     border-radius: 999px;
 }
+.mapping-table {
+    width: 100%;
+    table-layout: fixed;
+    font-size: 13px;
+}
 .mapping-table thead th {
     background: #f7faf9;
-    white-space: nowrap;
+    white-space: normal;
     border-bottom: 2px solid #dee7e3;
+    font-size: 13px;
+    padding: 10px 8px;
+}
+.mapping-table tbody td {
+    padding: 10px 8px;
+    vertical-align: middle;
+    overflow-wrap: anywhere;
 }
 .mapping-table tbody tr { transition: background .15s ease; }
 .mapping-table tbody tr:hover { background: #f4fbf8 !important; }
-.action-stack { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.mapping-table th:nth-child(1),
+.mapping-table td:nth-child(1) { width: 27%; }
+.mapping-table th:nth-child(2),
+.mapping-table td:nth-child(2) { width: 8%; }
+.mapping-table th:nth-child(3),
+.mapping-table td:nth-child(3) { width: 21%; }
+.mapping-table th:nth-child(4),
+.mapping-table td:nth-child(4) { width: 11%; }
+.mapping-table th:nth-child(5),
+.mapping-table td:nth-child(5) { width: 16%; }
+.mapping-table th:nth-child(6),
+.mapping-table td:nth-child(6) { width: 9%; }
+.mapping-table th:nth-child(7),
+.mapping-table td:nth-child(7) { width: 8%; }
+
+.mapping-table .form-select,
+.mapping-table .form-control {
+    font-size: 13px;
+    min-width: 0;
+}
+.mapping-table .btn {
+    font-size: 12px;
+    padding: 7px 8px;
+    white-space: normal;
+    line-height: 1.25;
+    width: 100%;
+}
+.mapping-table .file-name {
+    font-size: 13px;
+    line-height: 1.45;
+}
+.action-stack {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+@media (max-width: 900px) {
+    .mapping-table {
+        table-layout: auto;
+        min-width: 980px;
+    }
+}
 </style>
 
 <div class="legacy-hero d-flex justify-content-between align-items-center gap-3">
@@ -254,7 +308,7 @@ require __DIR__ . '/../partials/header.php';
                         }
                         ?>
                         <tr class="<?= $rowClass ?>">
-                            <td class="ps-4" style="min-width:280px">
+                            <td class="ps-4" style="min-width:0">
                                 <div class="file-name">
                                     <?= htmlspecialchars($f['relative_path']) ?>
                                 </div>
@@ -267,7 +321,7 @@ require __DIR__ . '/../partials/header.php';
                                 <?= number_format($f['size_bytes'] / 1024, 1) ?> KB
                             </td>
 
-                            <td style="min-width:250px">
+                            <td style="min-width:0">
                                 <select
                                     class="form-select"
                                     name="ep_id[<?= $f['id'] ?>]"
@@ -294,7 +348,7 @@ require __DIR__ . '/../partials/header.php';
                                 <?= $statusHtml ?>
                             </td>
 
-                            <td style="min-width:190px">
+                            <td style="min-width:0">
                                 <input
                                     class="form-control"
                                     name="catatan[<?= $f['id'] ?>]"
