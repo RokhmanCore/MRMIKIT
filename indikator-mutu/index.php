@@ -181,9 +181,34 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                     if($ce>$cs) $intervals[]=[$cs->getTimestamp(),$ce->getTimestamp()];
                 }
 
-                // Tidak membuat data 0 otomatis. Bulan tanpa kejadian tetap "Belum Ada Data"
-                // sampai diverifikasi oleh petugas.
-                if(!$intervals) continue;
+                // Untuk IM-IT-02, bulan yang SUDAH LEWAT tetapi tidak memiliki
+                // satu pun kejadian downtime dianggap "Tidak Ada Downtime" = 0 menit.
+                // Bulan berjalan dan bulan yang akan datang tetap "Belum Ada Data".
+                if(!$intervals){
+                    $nowYear=(int)date('Y');
+                    $nowMonth=(int)date('n');
+                    $isPastMonth=($tahun<$nowYear) || ($tahun===$nowYear && $bulan<$nowMonth);
+                    if($isPastMonth){
+                        $periode=$start->format('Y-m-d');
+                        $oldSt->execute([$indikator_id,$periode]);
+                        $old=$oldSt->fetch();
+                        $target=$ind['target']!==null?(float)$ind['target']:($old['target_snapshot']??null);
+
+                        // Tidak ada downtime = 0 menit. Bila target belum diisi,
+                        // 0 menit tetap ditandai tercapai karena arah IM-IT-02 adalah
+                        // semakin rendah semakin baik.
+                        $status=$target===null?'tercapai':(0 <= $target?'tercapai':'tidak_tercapai');
+
+                        $up->execute([
+                            $indikator_id,$periode,0,0,0,$target,
+                            $old['analisis']??'Tidak ditemukan kejadian downtime pada bulan ini.',
+                            $old['tindak_lanjut']??'',
+                            $status,$_SESSION['user']['id']??null
+                        ]);
+                        $hasil++;
+                    }
+                    continue;
+                }
 
                 $eventCount=count($intervals);
                 usort($intervals,fn($a,$b)=>$a[0]<=>$b[0]);
@@ -211,7 +236,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                 $hasil++;
             }
 
-            $msg="IM-IT-02 disinkronkan dari menu Downtime. {$hasil} bulan dengan kejadian downtime diperbarui; bulan tanpa kejadian tidak dibuat otomatis.";
+            $msg="IM-IT-02 disinkronkan dari menu Downtime. {$hasil} bulan diperbarui. Bulan yang sudah lewat tanpa kejadian downtime otomatis menjadi 0 menit; bulan berjalan/masa depan tetap Belum Ada Data.";
         }
 
         if ($action==='save_capaian_bulanan') {
