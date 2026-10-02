@@ -508,6 +508,7 @@ require __DIR__.'/../partials/header.php';
        <td><input type="text" class="form-control form-control-sm" name="bulanan[<?=$mm?>][analisis]" value="<?=h($rr['analisis']??'')?>" placeholder="Analisis singkat"></td>
        <td><input type="text" class="form-control form-control-sm" name="bulanan[<?=$mm?>][tindak_lanjut]" value="<?=h($rr['tindak_lanjut']??'')?>" placeholder="RTL"></td>
      </tr>
+     <?php endfor; ?>
     </tbody>
    </table>
   </div>
