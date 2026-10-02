@@ -162,7 +162,7 @@ foreach($indikators as $ii){
     $st->execute([(int)$ii['id'],$year]);
     $m=[];
     foreach($st as $rr) $m[(int)$rr['bulan']]=['capaian'=>$rr['capaian'],'status'=>$rr['status']];
-    $heatmapData[(int)$ii['id']=$m];
+    $heatmapData[(int)$ii['id']]=$m;
 }
 
 $detailId=(int)($_GET['detail']??0);
