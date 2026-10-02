@@ -64,6 +64,33 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             $msg='Capaian periode berhasil disimpan.';
         }
 
+        if ($action==='upload_bukti') {
+            $capaian_id=(int)($_POST['capaian_id']??0);
+            if (!$capaian_id || empty($_FILES['bukti_file']) || $_FILES['bukti_file']['error']!==UPLOAD_ERR_OK) {
+                throw new RuntimeException('File bukti belum dipilih atau gagal diunggah.');
+            }
+            $st=$pdo->prepare("SELECT c.id,c.indikator_id,c.periode,i.kode FROM mutu_capaian c JOIN mutu_indikator i ON i.id=c.indikator_id WHERE c.id=?");
+            $st->execute([$capaian_id]); $caprow=$st->fetch();
+            if (!$caprow) throw new RuntimeException('Data capaian tidak ditemukan.');
+
+            $f=$_FILES['bukti_file'];
+            $max=20*1024*1024;
+            if ($f['size']>$max) throw new RuntimeException('Ukuran file maksimal 20 MB.');
+            $allowed=['pdf','doc','docx','xls','xlsx','csv','jpg','jpeg','png','zip'];
+            $ext=strtolower(pathinfo($f['name'],PATHINFO_EXTENSION));
+            if (!in_array($ext,$allowed,true)) throw new RuntimeException('Format file tidak didukung. Gunakan PDF, Office, CSV, JPG/PNG atau ZIP.');
+
+            $dir=__DIR__.'/../uploads/mutu-indikator';
+            if (!is_dir($dir) && !mkdir($dir,0775,true) && !is_dir($dir)) throw new RuntimeException('Folder upload tidak dapat dibuat.');
+            $safe=bin2hex(random_bytes(8)).'_'.preg_replace('/[^A-Za-z0-9._-]/','_',basename($f['name']));
+            $dest=$dir.'/'.$safe;
+            if (!move_uploaded_file($f['tmp_name'],$dest)) throw new RuntimeException('File gagal disimpan.');
+
+            $st=$pdo->prepare("INSERT INTO mutu_bukti(capaian_id,nama_file,original_name,mime_type,size_bytes,catatan,uploaded_by) VALUES(?,?,?,?,?,?,?)");
+            $st->execute([$capaian_id,$safe,$f['name'],$f['type']??'',(int)$f['size'],trim($_POST['catatan_bukti']??''),$_SESSION['user']['id']??null]);
+            $msg='Bukti indikator berhasil diunggah.';
+        }
+
         if ($action==='map_ep') {
             $indikator_id=(int)$_POST['indikator_id'];
             $pdo->beginTransaction();
@@ -110,6 +137,8 @@ if($detailId){
  if($detail){
    $st=$pdo->prepare("SELECT c.*,DATE_FORMAT(c.periode,'%Y-%m') periode_label FROM mutu_capaian c WHERE c.indikator_id=? ORDER BY c.periode DESC");
    $st->execute([$detailId]);$rows=$st->fetchAll();
+   $buktiByCapaian=[];
+   if($rows){ $ids=array_map(fn($r)=>(int)$r['id'],$rows); $ph=implode(',',array_fill(0,count($ids),'?')); $bs=$pdo->prepare("SELECT * FROM mutu_bukti WHERE capaian_id IN ($ph) ORDER BY created_at DESC"); $bs->execute($ids); foreach($bs as $b)$buktiByCapaian[(int)$b['capaian_id']][]=$b; }
  }
 }
 
@@ -196,8 +225,19 @@ require __DIR__.'/../partials/header.php';
 <div class="col-12"><label class="form-label">Analisis</label><textarea name="analisis" class="form-control" rows="2"></textarea></div>
 <div class="col-12"><label class="form-label">Tindak lanjut</label><textarea name="tindak_lanjut" class="form-control" rows="2"></textarea></div>
 </div></form>
-<div class="table-responsive"><table class="table align-middle"><thead><tr><th>Periode</th><th>N</th><th>D</th><th>Capaian</th><th>Target</th><th>Status</th><th>Analisis / Tindak lanjut</th></tr></thead><tbody>
-<?php foreach($rows as $r):$s=$r['status'];?><tr><td><?=h($r['periode_label'])?></td><td><?=h($r['numerator'])?></td><td><?=h($r['denominator'])?></td><td><strong><?= $r['capaian']!==null?h(round((float)$r['capaian'],2).' '.$detail['satuan']):'-'?></strong></td><td><?=h($r['target_snapshot'])?></td><td><span class="status-pill <?=($s==='tercapai'?'status-tercapai':($s==='tidak_tercapai'?'status-tidak':'status-belum'))?>"><?=h(strtoupper(str_replace('_',' ',$s)))?></span></td><td><div><?=h($r['analisis']??'-')?></div><small class="text-muted"><?=h($r['tindak_lanjut']??'')?></small></td></tr><?php endforeach;?>
+<div class="table-responsive"><table class="table align-middle"><thead><tr><th>Periode</th><th>N</th><th>D</th><th>Capaian</th><th>Target</th><th>Status</th><th>Analisis / Tindak lanjut</th><th>Bukti</th></tr></thead><tbody>
+<?php foreach($rows as $r):$s=$r['status'];?><tr><td><?=h($r['periode_label'])?></td><td><?=h($r['numerator'])?></td><td><?=h($r['denominator'])?></td><td><strong><?= $r['capaian']!==null?h(round((float)$r['capaian'],2).' '.$detail['satuan']):'-'?></strong></td><td><?=h($r['target_snapshot'])?></td><td><span class="status-pill <?=($s==='tercapai'?'status-tercapai':($s==='tidak_tercapai'?'status-tidak':'status-belum'))?>"><?=h(strtoupper(str_replace('_',' ',$s)))?></span></td><td><div><?=h($r['analisis']??'-')?></div><small class="text-muted"><?=h($r['tindak_lanjut']??'')?></small></td>
+<td style="min-width:260px">
+ <?php foreach(($buktiByCapaian[(int)$r['id']]??[]) as $b): ?>
+   <div class="mb-1"><a href="download.php?id=<?=$b['id']?>" target="_blank"><?=h($b['original_name'])?></a> <small class="text-muted">(<?=round($b['size_bytes']/1024,1)?> KB)</small></div>
+ <?php endforeach; ?>
+ <form method="post" enctype="multipart/form-data" class="mt-2">
+  <input type="hidden" name="action" value="upload_bukti"><input type="hidden" name="capaian_id" value="<?=$r['id']?>">
+  <input type="file" name="bukti_file" class="form-control form-control-sm mb-1" required accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.zip">
+  <input type="text" name="catatan_bukti" class="form-control form-control-sm mb-1" placeholder="Catatan bukti (opsional)">
+  <button class="btn btn-sm btn-outline-success">📎 Upload bukti</button>
+ </form>
+</td></tr><?php endforeach;?>
 </tbody></table></div>
 </div></div>
 <?php endif;?>
