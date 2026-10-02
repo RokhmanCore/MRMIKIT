@@ -55,8 +55,30 @@ if (!$stream) {
 }
 
 $downloadName = basename((string)$file['original_name']);
-$downloadName = preg_replace('/[\x00-\x1F\x7F"\\]/u', '_', $downloadName);
-$downloadName = $downloadName ?: 'dokumen';
+$downloadName = trim($downloadName);
+
+// Pastikan ekstensi asli selalu ada.
+// Jika metadata lama hanya menyimpan nama tanpa ekstensi, ambil ekstensi dari path ZIP.
+$originalExt = strtolower(pathinfo($downloadName, PATHINFO_EXTENSION));
+if ($originalExt === '') {
+    $pathExt = strtolower(pathinfo($entryName, PATHINFO_EXTENSION));
+    if ($pathExt !== '') {
+        $downloadName .= '.' . $pathExt;
+    }
+}
+
+$downloadName = preg_replace('/[\\x00-\\x1F\\x7F"\\\\]/u', '_', $downloadName);
+$downloadName = $downloadName ?: 'dokumen.bin';
+
+// Nama ASCII untuk kompatibilitas Windows/Chrome, tetap mempertahankan ekstensi.
+$ext = pathinfo($downloadName, PATHINFO_EXTENSION);
+$base = pathinfo($downloadName, PATHINFO_FILENAME);
+$base = preg_replace('/[^A-Za-z0-9 _.-]/', '_', $base);
+$base = trim($base, " .");
+$fallbackName = $base !== '' ? $base : 'dokumen';
+if ($ext !== '') {
+    $fallbackName .= '.' . strtolower($ext);
+}
 
 while (ob_get_level()) {
     ob_end_clean();
@@ -64,13 +86,7 @@ while (ob_get_level()) {
 
 header('Content-Type: ' . zip_content_type($downloadName));
 header('Content-Length: ' . (int)($stat['size'] ?? $file['size_bytes']));
-$fallbackName = preg_replace('/[^\\x20-\\x7E]/', '_', $downloadName);
-$fallbackName = str_replace(['\\', '"'], '_', $fallbackName);
-if ($fallbackName === '') {
-    $fallbackName = 'dokumen' . (pathinfo($downloadName, PATHINFO_EXTENSION) ? '.' . pathinfo($downloadName, PATHINFO_EXTENSION) : '');
-}
 header('Content-Disposition: attachment; filename="' . $fallbackName . '"; filename*=UTF-8\'\'' . rawurlencode($downloadName));
-header('X-Content-Type-Options: nosniff');
 
 while (!feof($stream)) {
     echo fread($stream, 1024 * 1024);
