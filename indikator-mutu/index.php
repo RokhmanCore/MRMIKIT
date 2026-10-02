@@ -161,7 +161,7 @@ foreach($indikators as $ii){
     $st=$pdo->prepare("SELECT MONTH(periode) bulan,capaian,status FROM mutu_capaian WHERE indikator_id=? AND YEAR(periode)=? ORDER BY periode");
     $st->execute([(int)$ii['id'],$year]);
     $m=[];
-    foreach($st as $rr) $m[(int)$rr['bulan']=$rr['bulan']]=['capaian'=>$rr['capaian'],'status'=>$rr['status']];
+    foreach($st as $rr) $m[(int)$rr['bulan']]=['capaian'=>$rr['capaian'],'status'=>$rr['status']];
     $heatmapData[(int)$ii['id']=$m];
 }
 
