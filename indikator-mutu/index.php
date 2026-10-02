@@ -147,6 +147,73 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             $msg="IM-IT-01 disinkronkan dari downtime. Hanya bulan yang memiliki kejadian downtime yang diperbarui: {$hasil} bulan.";
         }
 
+        if ($action==='hitung_downtime_simrs') {
+            $indikator_id=(int)($_POST['indikator_id']??0);
+            $tahun=(int)($_POST['tahun']??date('Y'));
+            if($indikator_id<1 || $tahun<2020 || $tahun>2100) throw new RuntimeException('Indikator atau tahun tidak valid.');
+
+            $st=$pdo->prepare("SELECT * FROM mutu_indikator WHERE id=?");
+            $st->execute([$indikator_id]); $ind=$st->fetch();
+            if(!$ind) throw new RuntimeException('Indikator tidak ditemukan.');
+            if($ind['kode']!=='IM-IT-02') throw new RuntimeException('Fitur ini khusus IM-IT-02 Downtime SIMRS.');
+
+            $events=$pdo->query("SELECT id,mulai,selesai FROM downtime WHERE selesai IS NOT NULL AND selesai>mulai ORDER BY mulai")->fetchAll();
+
+            $oldSt=$pdo->prepare("SELECT analisis,tindak_lanjut,target_snapshot FROM mutu_capaian WHERE indikator_id=? AND periode=?");
+            $up=$pdo->prepare("INSERT INTO mutu_capaian
+                (indikator_id,periode,numerator,denominator,capaian,target_snapshot,analisis,tindak_lanjut,status,created_by)
+                VALUES (?,?,?,?,?,?,?,?,?,?)
+                ON DUPLICATE KEY UPDATE numerator=VALUES(numerator),denominator=VALUES(denominator),
+                capaian=VALUES(capaian),target_snapshot=VALUES(target_snapshot),
+                status=VALUES(status),updated_at=CURRENT_TIMESTAMP");
+
+            $hasil=0;
+            for($bulan=1;$bulan<=12;$bulan++){
+                $start=new DateTime(sprintf('%04d-%02d-01 00:00:00',$tahun,$bulan));
+                $end=(clone $start)->modify('+1 month');
+
+                $intervals=[];
+                foreach($events as $ev){
+                    $ds=new DateTime($ev['mulai']);
+                    $de=new DateTime($ev['selesai']);
+                    $cs=$ds>$start?$ds:$start;
+                    $ce=$de<$end?$de:$end;
+                    if($ce>$cs) $intervals[]=[$cs->getTimestamp(),$ce->getTimestamp()];
+                }
+
+                // Tidak membuat data 0 otomatis. Bulan tanpa kejadian tetap "Belum Ada Data"
+                // sampai diverifikasi oleh petugas.
+                if(!$intervals) continue;
+
+                $eventCount=count($intervals);
+                usort($intervals,fn($a,$b)=>$a[0]<=>$b[0]);
+                $merged=[];
+                foreach($intervals as $iv){
+                    if(!$merged || $iv[0]>$merged[count($merged)-1][1]) $merged[]=$iv;
+                    else $merged[count($merged)-1][1]=max($merged[count($merged)-1][1],$iv[1]);
+                }
+
+                $downSeconds=0;
+                foreach($merged as $iv) $downSeconds += $iv[1]-$iv[0];
+                $totalMinutes=round($downSeconds/60,2);
+                $periode=$start->format('Y-m-d');
+
+                $oldSt->execute([$indikator_id,$periode]);
+                $old=$oldSt->fetch();
+                $target=$ind['target']!==null?(float)$ind['target']:($old['target_snapshot']??null);
+                $status=$target===null?'belum_dinilai':($totalMinutes <= (float)$target?'tercapai':'tidak_tercapai');
+
+                $up->execute([
+                    $indikator_id,$periode,$totalMinutes,$eventCount,$totalMinutes,$target,
+                    $old['analisis']??'',''===($old['tindak_lanjut']??'')?'':$old['tindak_lanjut'],
+                    $status,$_SESSION['user']['id']??null
+                ]);
+                $hasil++;
+            }
+
+            $msg="IM-IT-02 disinkronkan dari menu Downtime. {$hasil} bulan dengan kejadian downtime diperbarui; bulan tanpa kejadian tidak dibuat otomatis.";
+        }
+
         if ($action==='save_capaian_bulanan') {
             $indikator_id=(int)($_POST['indikator_id']??0);
             $tahun=(int)($_POST['tahun']??date('Y'));
@@ -448,6 +515,29 @@ require __DIR__.'/../partials/header.php';
  <div class="d-flex justify-content-between align-items-center"><h6 class="mb-0">Grafik tren 12 bulan <?=h($year)?></h6><span class="small text-muted">Garis target = <?=h($detail['target']??'-')?> <?=h($detail['satuan'])?></span></div>
  <div class="chart-wrap mt-2"><canvas id="trendChart" aria-label="Grafik tren capaian 12 bulan"></canvas></div>
 </div></div>
+
+<?php if(($detail['kode']??'')==='IM-IT-02'): ?>
+<div class="card border-success shadow-sm mb-4"><div class="card-body">
+ <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div><h6 class="mb-1">⏱️ Ambil otomatis dari Downtime SIMRS</h6>
+   <div class="small text-muted">IM-IT-02 membaca semua kejadian dari menu Downtime, menjumlahkan durasi yang masuk ke setiap bulan, dan mengisi total menit downtime secara otomatis.</div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+   <a class="btn btn-outline-success" href="../downtime/">📋 Lihat Data Downtime</a>
+   <form method="post" class="m-0" onsubmit="return confirm('Ambil ulang IM-IT-02 dari seluruh data Downtime tahun <?=h($year)?>?');">
+    <input type="hidden" name="action" value="hitung_downtime_simrs">
+    <input type="hidden" name="indikator_id" value="<?=$detail['id']?>">
+    <input type="hidden" name="tahun" value="<?=$year?>">
+    <button class="btn btn-success">🔄 Ambil dari Downtime</button>
+   </form>
+  </div>
+ </div>
+ <div class="alert alert-warning mt-3 mb-0 small">
+  <strong>Catatan:</strong> N = total menit downtime, D = jumlah kejadian, Capaian = total menit downtime.
+  Bulan tanpa kejadian tidak otomatis dianggap 0; tetap <strong>Belum Ada Data</strong> sampai diverifikasi.
+ </div>
+</div></div>
+<?php endif; ?>
 
 <?php if(($detail['kode']??'')==='IM-IT-01'): ?>
 <div class="card border-success shadow-sm mb-4"><div class="card-body">
