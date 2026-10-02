@@ -1,0 +1,1 @@
+<?php require_once __DIR__.'/../config/config.php';require_once __DIR__.'/../config/auth.php';require_login();$page_title='Integrasi Sistem';require __DIR__.'/../partials/header.php';?><h2>Integrasi Sistem</h2><div class="alert alert-info">Inventaris integrasi SIMRS, SATUSEHAT, BPJS, Laboratorium, Radiologi dan sistem lain.</div><?php require __DIR__.'/../partials/footer.php';
