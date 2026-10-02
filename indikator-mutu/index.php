@@ -189,6 +189,9 @@ if($editCapaianId){
 $year=(int)($_GET['tahun']??date('Y'));
 if($year<2020 || $year>2100) $year=(int)date('Y');
 
+$monthNames=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+$byMonth=[];
+
 $heatmapData=[];
 foreach($indikators as $ii){
     $st=$pdo->prepare("SELECT MONTH(periode) bulan,capaian,status FROM mutu_capaian WHERE indikator_id=? AND YEAR(periode)=? ORDER BY periode");
@@ -206,6 +209,8 @@ if($detailId){
  if($detail){
    $st=$pdo->prepare("SELECT c.*,DATE_FORMAT(c.periode,'%Y-%m') periode_label FROM mutu_capaian c WHERE c.indikator_id=? ORDER BY c.periode DESC");
    $st->execute([$detailId]);$rows=$st->fetchAll();
+   $byMonth=[];
+   foreach($rows as $rr){ $bulan=(int)date('n',strtotime($rr['periode'])); if((int)date('Y',strtotime($rr['periode']))===$year) $byMonth[$bulan]=$rr; }
    $buktiByCapaian=[];
    if($rows){ $ids=array_map(fn($r)=>(int)$r['id'],$rows); $ph=implode(',',array_fill(0,count($ids),'?')); $bs=$pdo->prepare("SELECT * FROM mutu_bukti WHERE capaian_id IN ($ph) ORDER BY created_at DESC"); $bs->execute($ids); foreach($bs as $b)$buktiByCapaian[(int)$b['capaian_id']][]=$b; }
  }
