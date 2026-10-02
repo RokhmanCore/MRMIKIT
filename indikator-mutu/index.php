@@ -102,6 +102,11 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                 ON DUPLICATE KEY UPDATE numerator=VALUES(numerator),denominator=VALUES(denominator),capaian=VALUES(capaian),
                 target_snapshot=VALUES(target_snapshot),status=VALUES(status),updated_at=CURRENT_TIMESTAMP");
 
+            // Sinkronisasi IM-IT-01: hapus hasil otomatis lama lalu bangun hanya bulan
+            // yang benar-benar memiliki kejadian downtime. Bulan tanpa downtime tetap
+            // kosong/belum dinilai, bukan otomatis 100%.
+            $pdo->prepare("DELETE FROM mutu_capaian WHERE indikator_id=?")->execute([$indikator_id]);
+
             $hasil=0;
             for($bulan=1;$bulan<=12;$bulan++){
                 $start=new DateTime(sprintf('%04d-%02d-01 00:00:00',$tahun,$bulan));
@@ -115,14 +120,12 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                     $clipEnd=$de<$end?$de:$end;
                     if($clipEnd>$clipStart) $intervals[]=[$clipStart->getTimestamp(),$clipEnd->getTimestamp()];
                 }
-                // Gabungkan interval yang tumpang tindih agar downtime tidak dihitung dua kali.
                 usort($intervals,fn($a,$b)=>$a[0]<=>$b[0]);
                 $merged=[];
                 foreach($intervals as $iv){
                     if(!$merged || $iv[0]>$merged[count($merged)-1][1]) $merged[]=$iv;
                     else $merged[count($merged)-1][1]=max($merged[count($merged)-1][1],$iv[1]);
                 }
-                // Tidak ada catatan downtime bukan berarti otomatis 100%.
                 if(!$merged) continue;
 
                 $downSeconds=0;
@@ -132,15 +135,19 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                 $availableHours=max(0,$totalHours-$downHours);
                 $cap=$totalHours>0?($availableHours/$totalHours)*100:0;
                 $target=$ind['target']!==null?(float)$ind['target']:null;
-                $status='belum_dinilai';
-                if($target!==null) $status=($cap >= $target)?'tercapai':'tidak_tercapai';
-                $old=$existing[$bulan]??[];
-                $analisis=$old['analisis']??'';
-                $rtl=$old['tindak_lanjut']??'';
-                $up->execute([$indikator_id,$start->format('Y-m-d'),round($availableHours,4),round($totalHours,4),round($cap,4),$target,$analisis,$rtl,$status,$_SESSION['user']['id']??null]);
+                $status=$target===null?'belum_dinilai':($cap >= $target?'tercapai':'tidak_tercapai');
+
+                $up=$pdo->prepare("INSERT INTO mutu_capaian
+                    (indikator_id,periode,numerator,denominator,capaian,target_snapshot,analisis,tindak_lanjut,status,created_by)
+                    VALUES (?,?,?,?,?,?,?,?,?,?)
+                    ON DUPLICATE KEY UPDATE numerator=VALUES(numerator),denominator=VALUES(denominator),
+                    capaian=VALUES(capaian),target_snapshot=VALUES(target_snapshot),status=VALUES(status),
+                    updated_at=CURRENT_TIMESTAMP");
+                $up->execute([$indikator_id,$start->format('Y-m-d'),round($availableHours,4),round($totalHours,4),
+                    round($cap,4),$target,'','',$status,$_SESSION['user']['id']??null]);
                 $hasil++;
             }
-            $msg="IM-IT-01 dihitung hanya dari bulan yang memiliki catatan downtime. Bulan tanpa catatan tidak otomatis dianggap 100%; validasi/isi melalui Capaian 12 Bulan. Bulan terhitung: {$hasil}.";
+            $msg="IM-IT-01 dibangun ulang hanya dari bulan yang memiliki catatan downtime. Bulan tanpa downtime dibiarkan kosong/belum dinilai. Bulan terhitung: {$hasil}.";
         }
 
         if ($action==='save_capaian_bulanan') {
