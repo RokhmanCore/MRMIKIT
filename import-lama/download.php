@@ -64,7 +64,12 @@ while (ob_get_level()) {
 
 header('Content-Type: ' . zip_content_type($downloadName));
 header('Content-Length: ' . (int)($stat['size'] ?? $file['size_bytes']));
-header('Content-Disposition: attachment; filename*=UTF-8\'\'' . rawurlencode($downloadName));
+$fallbackName = preg_replace('/[^\\x20-\\x7E]/', '_', $downloadName);
+$fallbackName = str_replace(['\\', '"'], '_', $fallbackName);
+if ($fallbackName === '') {
+    $fallbackName = 'dokumen' . (pathinfo($downloadName, PATHINFO_EXTENSION) ? '.' . pathinfo($downloadName, PATHINFO_EXTENSION) : '');
+}
+header('Content-Disposition: attachment; filename="' . $fallbackName . '"; filename*=UTF-8\'\'' . rawurlencode($downloadName));
 header('X-Content-Type-Options: nosniff');
 
 while (!feof($stream)) {
