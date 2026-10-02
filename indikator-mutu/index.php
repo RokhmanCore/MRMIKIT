@@ -153,6 +153,18 @@ if($editCapaianId){
  $st->execute([$editCapaianId]); $editCapaian=$st->fetch();
 }
 
+$year=(int)($_GET['tahun']??date('Y'));
+if($year<2020 || $year>2100) $year=(int)date('Y');
+
+$heatmapData=[];
+foreach($indikators as $ii){
+    $st=$pdo->prepare("SELECT MONTH(periode) bulan,capaian,status FROM mutu_capaian WHERE indikator_id=? AND YEAR(periode)=? ORDER BY periode");
+    $st->execute([(int)$ii['id'],$year]);
+    $m=[];
+    foreach($st as $rr) $m[(int)$rr['bulan']=$rr['bulan']]=['capaian'=>$rr['capaian'],'status'=>$rr['status']];
+    $heatmapData[(int)$ii['id']=$m];
+}
+
 $detailId=(int)($_GET['detail']??0);
 $detail=null;$rows=[];
 if($detailId){
@@ -175,6 +187,14 @@ require __DIR__.'/../partials/header.php';
 .status-tercapai{background:#198754;color:#fff}.status-perhatian{background:#ffc107;color:#212529}.status-tidak{background:#dc3545;color:#fff}.status-belum{background:#6c757d;color:#fff}
 .kpi-number{font-size:26px;font-weight:800}
 .progress-mini{height:8px}
+.mutu-kpi{border:0;border-radius:16px;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.heatmap{display:grid;grid-template-columns:minmax(220px,1.6fr) repeat(12,minmax(34px,1fr));gap:3px;align-items:stretch}
+.heatmap>div{padding:7px 5px;text-align:center;font-size:12px;border-radius:5px}
+.hm-head{font-weight:700;background:#f1f3f5}.hm-name{text-align:left!important;font-weight:600;background:#f8f9fa}
+.hm-ok{background:#198754;color:#fff}.hm-bad{background:#dc3545;color:#fff}.hm-warn{background:#ffc107;color:#212529}.hm-empty{background:#e9ecef;color:#6c757d}
+.chart-wrap{position:relative;height:310px}.profile-label{font-size:12px;color:#6c757d;text-transform:uppercase;font-weight:700}.profile-value{font-weight:600}
+@media(max-width:900px){.heatmap{overflow-x:auto;grid-template-columns:180px repeat(12,45px);min-width:760px}}
+
 </style>
 
 <div class="mutu-hero">
@@ -188,6 +208,26 @@ require __DIR__.'/../partials/header.php';
 <?php if($err):?><div class="alert alert-danger"><?=h($err)?></div><?php endif;?>
 
 <div class="alert alert-warning"><strong>Catatan:</strong> indikator dan target di modul ini adalah indikator mutu internal IT. Target harus ditetapkan/disahkan oleh RS sesuai kebijakan dan metode pengukuran yang berlaku; jangan menganggap angka contoh sebagai target nasional.</div>
+
+<div class="card shadow-sm mutu-card mb-4 mutu-kpi"><div class="card-body">
+ <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div><h5 class="mb-1">Dashboard Mutu IT</h5><div class="small text-muted">Ringkasan capaian indikator tahun <?=h($year)?></div></div>
+  <form class="d-flex gap-2" method="get"><input type="hidden" name="detail" value="<?=h($detailId)?>"><select name="tahun" class="form-select form-select-sm" onchange="this.form.submit()"><?php for($yy=date('Y')-2;$yy<=date('Y')+1;$yy++):?><option value="<?=$yy?>" <?=$year===$yy?'selected':''?>><?=$yy?></option><?php endfor;?></select></form>
+ </div>
+ <div class="row g-3 mb-4">
+  <?php $tot=count($indikators);$ter=0;$tid=0;$bel=0;foreach($indikators as $ix){if(($ix['status_terakhir']??'')==='tercapai')$ter++;elseif(($ix['status_terakhir']??'')==='tidak_tercapai')$tid++;else $bel++;}?>
+  <div class="col-md-3"><div class="p-3 bg-light rounded-3"><div class="small text-muted">Total indikator</div><div class="kpi-number"><?=$tot?></div></div></div>
+  <div class="col-md-3"><div class="p-3 rounded-3" style="background:#e8f5ee"><div class="small text-muted">Tercapai</div><div class="kpi-number text-success"><?=$ter?></div></div></div>
+  <div class="col-md-3"><div class="p-3 rounded-3" style="background:#fff3cd"><div class="small text-muted">Tidak tercapai</div><div class="kpi-number text-danger"><?=$tid?></div></div></div>
+  <div class="col-md-3"><div class="p-3 rounded-3" style="background:#eef1f3"><div class="small text-muted">Belum dinilai</div><div class="kpi-number text-secondary"><?=$bel?></div></div></div>
+ </div>
+ <h6 class="mb-3">Heatmap capaian <?=h($year)?></h6>
+ <div class="table-responsive"><div class="heatmap">
+  <div class="hm-head text-start">Indikator</div><?php foreach(['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'] as $mn):?><div class="hm-head"><?=$mn?></div><?php endforeach;?>
+  <?php foreach($indikators as $ii):?><div class="hm-name"><?=h($ii['kode'])?><br><span class="small text-muted"><?=h($ii['nama'])?></span></div><?php for($mm=1;$mm<=12;$mm++):$hm=$heatmapData[(int)$ii['id']][$mm]??null;$hs=$hm['status']??'';$hc=$hs==='tercapai'?'hm-ok':($hs==='tidak_tercapai'?'hm-bad':($hs==='perlu_perhatian'?'hm-warn':'hm-empty'));?><div class="<?=$hc?>" title="<?=$hm&&$hm['capaian']!==null?h(round((float)$hm['capaian'],2).' '.$ii['satuan']):'Belum diinput'?>"><?=$hm&&$hm['capaian']!==null?h(round((float)$hm['capaian'],1)): '—'?></div><?php endfor;endforeach;?>
+ </div></div>
+ <div class="small text-muted mt-2">🟢 tercapai · 🟡 perlu perhatian · 🔴 tidak tercapai · ⚪ belum ada capaian.</div>
+</div></div>
 
 <div class="card shadow-sm mutu-card mb-4"><div class="card-body">
  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2"><h5 class="mb-0">Daftar Indikator</h5><button class="btn btn-success" data-bs-toggle="collapse" data-bs-target="#formIndikator">+ Tambah indikator</button></div>
@@ -237,6 +277,27 @@ require __DIR__.'/../partials/header.php';
 <?php if($detail): ?>
 <div class="card shadow-sm mutu-card mb-4"><div class="card-body">
 <h5><?= $editCapaian ? 'Edit capaian' : 'Tambah capaian' ?>: <?=h($detail['kode'])?> — <?=h($detail['nama'])?></h5>
+<div class="row g-3 mb-4">
+ <div class="col-md-3"><div class="card mutu-kpi h-100"><div class="card-body"><div class="profile-label">Target</div><div class="fs-4 fw-bold"><?= $detail['target']!==null?h($detail['target'].' '.$detail['satuan']):'-'?></div></div></div></div>
+ <div class="col-md-3"><div class="card mutu-kpi h-100"><div class="card-body"><div class="profile-label">PIC</div><div class="profile-value"><?=h($detail['pic_nama']??'-')?></div></div></div></div>
+ <div class="col-md-3"><div class="card mutu-kpi h-100"><div class="card-body"><div class="profile-label">Frekuensi</div><div class="profile-value"><?=h($detail['frekuensi'])?></div></div></div></div>
+ <div class="col-md-3 d-flex align-items-stretch"><a class="btn btn-outline-danger w-100 d-flex align-items-center justify-content-center" target="_blank" href="laporan.php?id=<?=$detail['id']?>&tahun=<?=$year?>">📄 Cetak Laporan / PDF</a></div>
+</div>
+<div class="card border-0 bg-light mb-4"><div class="card-body">
+ <div class="row g-3">
+  <div class="col-md-6"><div class="profile-label">Definisi operasional</div><div><?=nl2br(h($detail['definisi_operasional']??'-'))?></div></div>
+  <div class="col-md-3"><div class="profile-label">Formula</div><div><?=h($detail['formula']??'N / D × 100')?></div></div>
+  <div class="col-md-3"><div class="profile-label">Sumber data</div><div><?=h($detail['sumber_data']??'-')?></div></div>
+  <div class="col-md-6"><div class="profile-label">Numerator</div><div><?=h($detail['numerator_label']??'-')?></div></div>
+  <div class="col-md-6"><div class="profile-label">Denominator</div><div><?=h($detail['denominator_label']??'-')?></div></div>
+ </div>
+</div></div>
+<div class="card shadow-sm mb-4"><div class="card-body"><div class="d-flex justify-content-between"><h6>Grafik tren 12 bulan <?=h($year)?></h6><span class="small text-muted">Garis target = <?=h($detail['target']??'-')?> <?=h($detail['satuan'])?></span></div><div class="chart-wrap"><canvas id="trendChart"></canvas></div></div></div>
+<div class="card shadow-sm mb-4"><div class="card-body"><h6>Tabel capaian 12 bulan <?=h($year)?></h6>
+<div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Bulan</th><th>Numerator</th><th>Denominator</th><th>Capaian</th><th>Target</th><th>Status</th><th>Analisis / RTL</th></tr></thead><tbody>
+<?php $monthNames=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];$byMonth=[];foreach($rows as $rr){$byMonth[(int)date('n',strtotime($rr['periode']))]=$rr;}for($mm=1;$mm<=12;$mm++):$rr=$byMonth[$mm]??null;$ss=$rr['status']??'belum_dinilai';?>
+<tr><td><strong><?=h($monthNames[$mm-1])?></strong></td><td><?=$rr?h($rr['numerator']):'—'?></td><td><?=$rr?h($rr['denominator']):'—'?></td><td><strong><?=$rr&&$rr['capaian']!==null?h(round((float)$rr['capaian'],2).' '.$detail['satuan']):'—'?></strong></td><td><?=$rr?h($rr['target_snapshot']):h($detail['target']??'—')?></td><td><span class="status-pill <?=($ss==='tercapai'?'status-tercapai':($ss==='tidak_tercapai'?'status-tidak':($ss==='perlu_perhatian'?'status-perhatian':'status-belum')))?>"><?=h(strtoupper(str_replace('_',' ',$ss)))?></span></td><td><?=$rr?h(($rr['analisis']??'').' '.($rr['tindak_lanjut']??'')):'—'?></td></tr>
+<?php endfor;?></tbody></table></div></div></div>
 <div class="small text-muted mb-3">Target: <?= $detail['target']!==null?h($detail['target'].' '.$detail['satuan']):'belum ditetapkan'?> · Arah: <?=h($detail['arah'])?></div>
 <form method="post" class="border rounded p-3 mb-4"><input type="hidden" name="action" value="save_capaian"><input type="hidden" name="indikator_id" value="<?=$detail['id']?>"><input type="hidden" name="edit_capaian_id" value="<?=h($editCapaian['id']??0)?>">
 <div class="row g-3">
