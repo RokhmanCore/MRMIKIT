@@ -81,6 +81,39 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             }
         }
 
+        if ($action==='save_capaian_bulanan') {
+            $indikator_id=(int)($_POST['indikator_id']??0);
+            $tahun=(int)($_POST['tahun']??date('Y'));
+            if($indikator_id<1 || $tahun<2020 || $tahun>2100) throw new RuntimeException('Indikator atau tahun tidak valid.');
+            $st=$pdo->prepare("SELECT arah,target FROM mutu_indikator WHERE id=?");
+            $st->execute([$indikator_id]); $ind=$st->fetch();
+            if(!$ind) throw new RuntimeException('Indikator tidak ditemukan.');
+            $rowsPost=$_POST['bulanan']??[];
+            $sql=$pdo->prepare("INSERT INTO mutu_capaian
+                (indikator_id,periode,numerator,denominator,capaian,target_snapshot,analisis,tindak_lanjut,status,created_by)
+                VALUES (?,?,?,?,?,?,?,?,?,?)
+                ON DUPLICATE KEY UPDATE numerator=VALUES(numerator),denominator=VALUES(denominator),capaian=VALUES(capaian),
+                target_snapshot=VALUES(target_snapshot),analisis=VALUES(analisis),tindak_lanjut=VALUES(tindak_lanjut),
+                status=VALUES(status),updated_at=CURRENT_TIMESTAMP");
+            $tersimpan=0;
+            for($bulan=1;$bulan<=12;$bulan++){
+                $r=is_array($rowsPost[$bulan]??null)?$rowsPost[$bulan]:[];
+                $num=trim((string)($r['numerator']??'')); $den=trim((string)($r['denominator']??''));
+                $cap=trim((string)($r['capaian']??'')); $target=trim((string)($r['target']??''));
+                $analisis=trim((string)($r['analisis']??'')); $rtl=trim((string)($r['tindak_lanjut']??''));
+                if($num==='' && $den==='' && $cap==='' && $target==='' && $analisis==='' && $rtl==='') continue;
+                $numVal=($num!=='')?(float)$num:null; $denVal=($den!=='')?(float)$den:null; $capVal=($cap!=='')?(float)$cap:null;
+                $targetVal=($target!=='')?(float)$target:($ind['target']!==null?(float)$ind['target']:null);
+                if($capVal===null && $numVal!==null && $denVal!==null && $denVal!=0) $capVal=($numVal/$denVal)*100;
+                $status='belum_dinilai';
+                if($capVal!==null && $targetVal!==null) $status=((($ind['arah']??'sesuai_target')==='turun')?($capVal<=$targetVal):($capVal>=$targetVal))?'tercapai':'tidak_tercapai';
+                $periode=sprintf('%04d-%02d-01',$tahun,$bulan);
+                $sql->execute([$indikator_id,$periode,$numVal,$denVal,$capVal,$targetVal,$analisis,$rtl,$status,$_SESSION['user']['id']??null]);
+                $tersimpan++;
+            }
+            $msg=$tersimpan>0 ? "Capaian {$tersimpan} bulan berhasil disimpan." : 'Tidak ada perubahan yang diisi.';
+        }
+
         if ($action==='upload_bukti') {
             $capaian_id=(int)($_POST['capaian_id']??0);
             if (!$capaian_id || empty($_FILES['bukti_file']) || $_FILES['bukti_file']['error']!==UPLOAD_ERR_OK) {
@@ -192,7 +225,7 @@ require __DIR__.'/../partials/header.php';
 .heatmap>div{padding:7px 5px;text-align:center;font-size:12px;border-radius:5px}
 .hm-head{font-weight:700;background:#f1f3f5}.hm-name{text-align:left!important;font-weight:600;background:#f8f9fa}
 .hm-ok{background:#198754;color:#fff}.hm-bad{background:#dc3545;color:#fff}.hm-warn{background:#ffc107;color:#212529}.hm-empty{background:#e9ecef;color:#6c757d}
-.chart-wrap{position:relative;height:310px}.profile-label{font-size:12px;color:#6c757d;text-transform:uppercase;font-weight:700}.profile-value{font-weight:600}
+.chart-wrap{position:relative;height:310px}.monthly-input-table{min-width:1100px}.monthly-input-table th{white-space:nowrap}.monthly-input-table input{min-width:95px}.monthly-input-table td:nth-child(7),.monthly-input-table td:nth-child(8){min-width:180px}.profile-label{font-size:12px;color:#6c757d;text-transform:uppercase;font-weight:700}.profile-value{font-weight:600}
 @media(max-width:900px){.heatmap{overflow-x:auto;grid-template-columns:180px repeat(12,45px);min-width:760px}}
 
 </style>
@@ -292,24 +325,44 @@ require __DIR__.'/../partials/header.php';
   <div class="col-md-6"><div class="profile-label">Denominator</div><div><?=h($detail['denominator_label']??'-')?></div></div>
  </div>
 </div></div>
-<div class="card shadow-sm mb-4"><div class="card-body"><div class="d-flex justify-content-between"><h6>Grafik tren 12 bulan <?=h($year)?></h6><span class="small text-muted">Garis target = <?=h($detail['target']??'-')?> <?=h($detail['satuan'])?></span></div><div class="chart-wrap"><canvas id="trendChart"></canvas></div></div></div>
+<div class="card shadow-sm mb-4"><div class="card-body">
+ <div class="d-flex justify-content-between align-items-center"><h6 class="mb-0">Grafik tren 12 bulan <?=h($year)?></h6><span class="small text-muted">Garis target = <?=h($detail['target']??'-')?> <?=h($detail['satuan'])?></span></div>
+ <div class="chart-wrap mt-2"><canvas id=<div class="card shadow-sm mb-4"><div class="card-body">
+ <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div><h6 class="mb-1">Input Capaian 12 Bulan <?=h($year)?></h6><div class="small text-muted">Isi Numerator dan Denominator. Capaian dihitung otomatis jika keduanya diisi. Baris kosong tidak disimpan.</div></div>
+  <button type="submit" form="formCapaian12" class="btn btn-success">💾 Simpan Semua Capaian</button>
+ </div>
+ <form method="post" id="formCapaian12">
+  <input type="hidden" name="action" value="save_capaian_bulanan">
+  <input type="hidden" name="indikator_id" value="<?=$detail['id']?>">
+  <input type="hidden" name="tahun" value="<?=$year?>">
+  <div class="table-responsive mt-3">
+   <table class="table table-bordered table-sm align-middle monthly-input-table">
+    <thead><tr><th>Bulan</th><th>N</th><th>D</th><th>Capaian</th><th>Target</th><th>Status</th><th>Analisis</th><th>Tindak lanjut</th></tr></thead>
+    <tbody>
+    <?php for($mm=1;$mm<=12;$mm++): $rr=$byMonth[$mm]??null; $ss=$rr['status']??'belum_dinilai'; ?>
+    <tr class="<?=($ss==='tercapai'?'table-success':($ss==='tidak_tercapai'?'table-danger':''))?>">
+      <td><strong><?=h($monthNames[$mm-1])?></strong><div class="small text-muted"><?=$year?>-<?=str_pad($mm,2,'0',STR_PAD_LEFT)?></div></td>
+      <td><input type="number" step="0.0001" class="form-control form-control-sm month-num" name="bulanan[<?=$mm?>][numerator]" value="<?=h($rr['numerator']??'')?>" placeholder="N"></td>
+      <td><input type="number" step="0.0001" class="form-control form-control-sm month-den" name="bulanan[<?=$mm?>][denominator]" value="<?=h($rr['denominator']??'')?>" placeholder="D"></td>
+      <td><input type="number" step="0.0001" class="form-control form-control-sm month-cap" name="bulanan[<?=$mm?>][capaian]" value="<?=h($rr['capaian']??'')?>" placeholder="otomatis"></td>
+      <td><input type="number" step="0.0001" class="form-control form-control-sm" name="bulanan[<?=$mm?>][target]" value="<?=h($rr['target_snapshot']??$detail['target']??'')?>"></td>
+      <td><span class="status-pill <?=($ss==='tercapai'?'status-tercapai':($ss==='tidak_tercapai'?'status-tidak':($ss==='perlu_perhatian'?'status-perhatian':'status-belum')))?>"><?=h(strtoupper(str_replace('_',' ',$ss)))?></span></td>
+      <td><input type="text" class="form-control form-control-sm" name="bulanan[<?=$mm?>][analisis]" value="<?=h($rr['analisis']??'')?>" placeholder="Analisis singkat"></td>
+      <td><input type="text" class="form-control form-control-sm" name="bulanan[<?=$mm?>][tindak_lanjut]" value="<?=h($rr['tindak_lanjut']??'')?>" placeholder="RTL"></td>
+    </tr>
+    <?php endfor; ?>
+    </tbody>
+   </table>
+  </div>
+ </form>
+</div></div>
+
 <div class="card shadow-sm mb-4"><div class="card-body"><h6>Tabel capaian 12 bulan <?=h($year)?></h6>
 <div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Bulan</th><th>Numerator</th><th>Denominator</th><th>Capaian</th><th>Target</th><th>Status</th><th>Analisis / RTL</th></tr></thead><tbody>
-<?php $monthNames=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];$byMonth=[];foreach($rows as $rr){$byMonth[(int)date('n',strtotime($rr['periode']))]=$rr;}for($mm=1;$mm<=12;$mm++):$rr=$byMonth[$mm]??null;$ss=$rr['status']??'belum_dinilai';?>
+<?php for($mm=1;$mm<=12;$mm++):$rr=$byMonth[$mm]??null;$ss=$rr['status']??'belum_dinilai';?>
 <tr><td><strong><?=h($monthNames[$mm-1])?></strong></td><td><?=$rr?h($rr['numerator']):'—'?></td><td><?=$rr?h($rr['denominator']):'—'?></td><td><strong><?=$rr&&$rr['capaian']!==null?h(round((float)$rr['capaian'],2).' '.$detail['satuan']):'—'?></strong></td><td><?=$rr?h($rr['target_snapshot']):h($detail['target']??'—')?></td><td><span class="status-pill <?=($ss==='tercapai'?'status-tercapai':($ss==='tidak_tercapai'?'status-tidak':($ss==='perlu_perhatian'?'status-perhatian':'status-belum')))?>"><?=h(strtoupper(str_replace('_',' ',$ss)))?></span></td><td><?=$rr?h(($rr['analisis']??'').' '.($rr['tindak_lanjut']??'')):'—'?></td></tr>
 <?php endfor;?></tbody></table></div></div></div>
-<div class="small text-muted mb-3">Target: <?= $detail['target']!==null?h($detail['target'].' '.$detail['satuan']):'belum ditetapkan'?> · Arah: <?=h($detail['arah'])?></div>
-<form method="post" class="border rounded p-3 mb-4"><input type="hidden" name="action" value="save_capaian"><input type="hidden" name="indikator_id" value="<?=$detail['id']?>"><input type="hidden" name="edit_capaian_id" value="<?=h($editCapaian['id']??0)?>">
-<div class="row g-3">
-<div class="col-md-2"><label class="form-label">Periode</label><input type="month" name="periode" class="form-control" required value="<?=h($editCapaian ? substr($editCapaian['periode'],0,7) : date('Y-m'))?>"></div>
-<div class="col-md-2"><label class="form-label">Numerator</label><input type="number" step="0.0001" name="numerator" class="form-control" value="<?=h($editCapaian['numerator']??'')?>"></div>
-<div class="col-md-2"><label class="form-label">Denominator</label><input type="number" step="0.0001" name="denominator" class="form-control" value="<?=h($editCapaian['denominator']??'')?>"></div>
-<div class="col-md-2"><label class="form-label">Capaian</label><input type="number" step="0.0001" name="capaian" class="form-control" placeholder="otomatis bila N/D" value="<?=h($editCapaian['capaian']??'')?>"></div>
-<div class="col-md-2"><label class="form-label">Target periode</label><input type="number" step="0.0001" name="target_snapshot" class="form-control" value="<?=h($editCapaian['target_snapshot'] ?? $detail['target'] ?? '')?>"></div>
-<div class="col-md-2 d-flex align-items-end"><button class="btn btn-success w-100">Simpan</button></div>
-<div class="col-12"><label class="form-label">Analisis</label><textarea name="analisis" class="form-control" rows="2"><?=h($editCapaian['analisis']??'')?></textarea></div>
-<div class="col-12"><label class="form-label">Tindak lanjut</label><textarea name="tindak_lanjut" class="form-control" rows="2"><?=h($editCapaian['tindak_lanjut']??'')?></textarea></div>
-</div></form>
 <div class="table-responsive"><table class="table align-middle"><thead><tr><th>Periode</th><th>N</th><th>D</th><th>Capaian</th><th>Target</th><th>Status</th><th>Analisis / Tindak lanjut</th><th>Aksi</th><th>Bukti</th></tr></thead><tbody>
 <?php foreach($rows as $r):$s=$r['status'];?><tr><td><?=h($r['periode_label'])?></td><td><?=h($r['numerator'])?></td><td><?=h($r['denominator'])?></td><td><strong><?= $r['capaian']!==null?h(round((float)$r['capaian'],2).' '.$detail['satuan']):'-'?></strong></td><td><?=h($r['target_snapshot'])?></td><td><span class="status-pill <?=($s==='tercapai'?'status-tercapai':($s==='tidak_tercapai'?'status-tidak':'status-belum'))?>"><?=h(strtoupper(str_replace('_',' ',$s)))?></span></td><td><div><?=h($r['analisis']??'-')?></div><small class="text-muted"><?=h($r['tindak_lanjut']??'')?></small></td>
 <td class="text-nowrap">
@@ -334,4 +387,41 @@ require __DIR__.'/../partials/header.php';
 </div></div>
 <?php endif;?>
 
+<script>
+(function(){
+ const canvas=document.getElementById('trendChart');
+ if(!canvas) return;
+ const ctx=canvas.getContext('2d');
+ const labels=<?=json_encode($monthNames,JSON_UNESCAPED_UNICODE)?>;
+ const data=<?=json_encode(array_map(function($m)use($byMonth){$r=$byMonth[$m]??null;return $r&&$r['capaian']!==null?(float)$r['capaian']:null;},range(1,12)))?>;
+ const target=<?=json_encode($detail['target']!==null?(float)$detail['target']:null)?>;
+ const dpr=window.devicePixelRatio||1;
+ function draw(){
+   const w=canvas.clientWidth||900,h=canvas.clientHeight||310;
+   canvas.width=w*dpr;canvas.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
+   ctx.clearRect(0,0,w,h);
+   const pad={l:48,r:18,t:22,b:42},pw=w-pad.l-pad.r,ph=h-pad.t-pad.b;
+   const vals=data.filter(v=>v!==null);
+   if(!vals.length){ctx.font='14px Arial';ctx.fillStyle='#6c757d';ctx.fillText('Belum ada capaian untuk tahun ini.',pad.l,pad.t+30);return;}
+   let min=Math.min(...vals,target??Infinity),max=Math.max(...vals,target??-Infinity);
+   if(!Number.isFinite(min))min=0;if(!Number.isFinite(max))max=100;
+   const range=Math.max(max-min,1);min-=range*.12;max+=range*.12;
+   const x=i=>pad.l+(pw*i/11), y=v=>pad.t+(max-v)*ph/(max-min);
+   ctx.strokeStyle='#e9ecef';ctx.lineWidth=1;
+   for(let g=0;g<=4;g++){const yy=pad.t+ph*g/4;ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(w-pad.r,yy);ctx.stroke();ctx.fillStyle='#6c757d';ctx.font='11px Arial';const val=max-(max-min)*g/4;ctx.fillText(val.toFixed(1),5,yy+4);}
+   if(target!==null){ctx.strokeStyle='#dc3545';ctx.setLineDash([6,5]);ctx.beginPath();ctx.moveTo(pad.l,y(target));ctx.lineTo(w-pad.r,y(target));ctx.stroke();ctx.setLineDash([]);}
+   ctx.strokeStyle='#198754';ctx.lineWidth=3;ctx.beginPath();let started=false;
+   data.forEach((v,i)=>{if(v===null){started=false;return;}const xx=x(i),yy=y(v);if(!started){ctx.moveTo(xx,yy);started=true;}else ctx.lineTo(xx,yy);});ctx.stroke();
+   data.forEach((v,i)=>{if(v===null)return;const xx=x(i),yy=y(v);ctx.fillStyle='#198754';ctx.beginPath();ctx.arc(xx,yy,4,0,Math.PI*2);ctx.fill();ctx.fillStyle='#212529';ctx.font='11px Arial';ctx.textAlign='center';ctx.fillText(v.toFixed(2)+'%',xx,yy-9);});
+   ctx.fillStyle='#495057';ctx.font='11px Arial';labels.forEach((lab,i)=>{ctx.textAlign='center';ctx.fillText(lab.slice(0,3),x(i),h-15);});
+ }
+ draw();window.addEventListener('resize',draw);
+})();
+document.querySelectorAll('#formCapaian12 tr').forEach(function(row){
+ const n=row.querySelector('.month-num'),d=row.querySelector('.month-den'),cap=row.querySelector('.month-cap');
+ if(!n||!d||!cap)return;
+ function calc(){if(n.value!==''&&d.value!==''&&Number(d.value)!==0){cap.value=(Number(n.value)/Number(d.value)*100).toFixed(4);}}
+ n.addEventListener('input',calc);d.addEventListener('input',calc);
+});
+</script>
 <?php require __DIR__.'/../partials/footer.php';
