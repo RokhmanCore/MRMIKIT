@@ -193,7 +193,45 @@ CREATE TABLE IF NOT EXISTS mutu_backup_bukti (
     uploaded_by INT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_backup_bukti (indikator_id,tahun,jenis),
     INDEX idx_backup_bukti_indikator (indikator_id,tahun),
     FOREIGN KEY (indikator_id) REFERENCES mutu_indikator(id) ON DELETE CASCADE
+);
+
+
+/* IM-IT-04: Uji Restore Backup */
+CREATE TABLE IF NOT EXISTS mutu_restore_uji (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    indikator_id INT NOT NULL,
+    tanggal_uji DATE NOT NULL,
+    jenis_backup ENUM('offline','online','lainnya') NOT NULL DEFAULT 'offline',
+    sumber_backup VARCHAR(255) NULL,
+    target_restore VARCHAR(255) NULL,
+    mulai DATETIME NULL,
+    selesai DATETIME NULL,
+    durasi_detik INT NULL,
+    hasil ENUM('berhasil','gagal') NOT NULL DEFAULT 'berhasil',
+    verifikasi TEXT NULL,
+    analisis TEXT NULL,
+    tindak_lanjut TEXT NULL,
+    pic_id INT NULL,
+    created_by INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_restore_indikator_tanggal (indikator_id,tanggal_uji),
+    FOREIGN KEY (indikator_id) REFERENCES mutu_indikator(id) ON DELETE CASCADE,
+    FOREIGN KEY (pic_id) REFERENCES pic(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS mutu_restore_bukti (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    restore_id INT NOT NULL,
+    nama_file VARCHAR(255) NOT NULL,
+    original_name VARCHAR(255) NOT NULL,
+    mime_type VARCHAR(150) NULL,
+    size_bytes BIGINT NOT NULL DEFAULT 0,
+    catatan TEXT NULL,
+    uploaded_by INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (restore_id) REFERENCES mutu_restore_uji(id) ON DELETE CASCADE,
+    INDEX idx_restore_bukti (restore_id)
 );
