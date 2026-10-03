@@ -20,7 +20,16 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS mutu_backup_harian (
     UNIQUE KEY uq_backup_periode (indikator_id, periode),
     INDEX idx_backup_indikator_periode (indikator_id, periode)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-/* Bukti perwakilan IM-IT-03: satu bukti offline dan satu bukti online per tahun. */
+/* Bukti perwakilan IM-IT-03: dapat menyimpan banyak bukti offline/online per tahun. */
+try {
+    $idxRows=$pdo->query("SHOW INDEX FROM mutu_backup_bukti WHERE Key_name='uq_backup_bukti'")->fetchAll();
+    if($idxRows){
+        $pdo->exec("ALTER TABLE mutu_backup_bukti DROP INDEX uq_backup_bukti");
+    }
+} catch (Throwable $migrationErr) {
+    /* Abaikan jika database sudah menggunakan struktur multi-bukti. */
+}
+
 $pdo->exec("CREATE TABLE IF NOT EXISTS mutu_backup_bukti (
     id INT AUTO_INCREMENT PRIMARY KEY,
     indikator_id INT NOT NULL,
@@ -549,24 +558,47 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             $st=$pdo->prepare("SELECT id,kode FROM mutu_indikator WHERE id=?");
             $st->execute([$indikator_id]);$ind=$st->fetch();
             if(!$ind || $ind['kode']!=='IM-IT-03') throw new RuntimeException('Bukti ini khusus IM-IT-03.');
-            if(empty($_FILES['backup_evidence']) || $_FILES['backup_evidence']['error']!==UPLOAD_ERR_OK) throw new RuntimeException('File bukti belum dipilih atau gagal diunggah.');
-            $f=$_FILES['backup_evidence'];
-            if($f['size']>20*1024*1024) throw new RuntimeException('Ukuran file maksimal 20 MB.');
+
+            $files=$_FILES['backup_evidence']??null;
+            if(!$files || !isset($files['name']) || !is_array($files['name'])) {
+                throw new RuntimeException('File bukti belum dipilih atau format upload tidak valid.');
+            }
+            $fileCount=count($files['name']);
+            if($fileCount<1) throw new RuntimeException('Pilih minimal satu file bukti.');
+            if($fileCount>20) throw new RuntimeException('Maksimal 20 file sekali upload.');
+
             $allowed=['pdf','jpg','jpeg','png'];
-            $ext=strtolower(pathinfo($f['name'],PATHINFO_EXTENSION));
-            if(!in_array($ext,$allowed,true)) throw new RuntimeException('Bukti gunakan PDF, JPG, JPEG atau PNG.');
+            $maxSize=20*1024*1024;
+            for($n=0;$n<$fileCount;$n++){
+                $error=(int)($files['error'][$n]??UPLOAD_ERR_NO_FILE);
+                if($error!==UPLOAD_ERR_OK) throw new RuntimeException('Salah satu file gagal diunggah. Silakan pilih ulang file.');
+                if((int)$files['size'][$n]>$maxSize) throw new RuntimeException('Setiap file bukti maksimal 20 MB.');
+                $ext=strtolower(pathinfo((string)$files['name'][$n],PATHINFO_EXTENSION));
+                if(!in_array($ext,$allowed,true)) throw new RuntimeException('Semua bukti harus PDF, JPG, JPEG atau PNG.');
+            }
+
             $dir=__DIR__.'/../uploads/mutu-indikator/backup-evidence';
             if(!is_dir($dir) && !mkdir($dir,0775,true) && !is_dir($dir)) throw new RuntimeException('Folder bukti backup tidak dapat dibuat.');
-            $oldSt=$pdo->prepare("SELECT nama_file FROM mutu_backup_bukti WHERE indikator_id=? AND tahun=? AND jenis=?");
-            $oldSt->execute([$indikator_id,$tahun,$jenis]);$old=$oldSt->fetch();
-            $safe=bin2hex(random_bytes(8)).'_'.preg_replace('/[^A-Za-z0-9._-]/','_',basename($f['name']));
-            $dest=$dir.'/'.$safe;
-            if(!move_uploaded_file($f['tmp_name'],$dest)) throw new RuntimeException('File bukti gagal disimpan.');
+
             $note=trim($_POST['catatan_bukti_backup']??'');
-            $up=$pdo->prepare("INSERT INTO mutu_backup_bukti(indikator_id,tahun,jenis,nama_file,original_name,mime_type,size_bytes,catatan,uploaded_by) VALUES(?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE nama_file=VALUES(nama_file),original_name=VALUES(original_name),mime_type=VALUES(mime_type),size_bytes=VALUES(size_bytes),catatan=VALUES(catatan),uploaded_by=VALUES(uploaded_by),updated_at=CURRENT_TIMESTAMP");
-            $up->execute([$indikator_id,$tahun,$jenis,$safe,$f['name'],$f['type']??'',(int)$f['size'],$note,$_SESSION['user']['id']??null]);
-            if($old && !empty($old['nama_file'])) @unlink($dir.'/'.$old['nama_file']);
-            $msg='Bukti backup '.ucfirst($jenis).' berhasil disimpan untuk laporan tahun '.$tahun.'.';
+            $up=$pdo->prepare("INSERT INTO mutu_backup_bukti(indikator_id,tahun,jenis,nama_file,original_name,mime_type,size_bytes,catatan,uploaded_by) VALUES(?,?,?,?,?,?,?,?,?)");
+            $saved=0;
+            for($n=0;$n<$fileCount;$n++){
+                $originalName=basename((string)$files['name'][$n]);
+                $safe=bin2hex(random_bytes(8)).'_'.preg_replace('/[^A-Za-z0-9._-]/','_', $originalName);
+                $dest=$dir.'/'.$safe;
+                if(!move_uploaded_file($files['tmp_name'][$n],$dest)) {
+                    throw new RuntimeException('File bukti gagal disimpan: '.$originalName);
+                }
+                $up->execute([
+                    $indikator_id,$tahun,$jenis,$safe,$originalName,
+                    $files['type'][$n]??'',(int)$files['size'][$n],$note,
+                    $_SESSION['user']['id']??null
+                ]);
+                $saved++;
+            }
+            $label=ucfirst($jenis);
+            $msg=$saved.' bukti backup '.$label.' berhasil ditambahkan untuk laporan tahun '.$tahun.'.';
         }
 
         if ($action==='upload_bukti') {
@@ -1097,28 +1129,40 @@ require __DIR__.'/../partials/header.php';
  </form>
 
  <div class="mt-4 p-3 border rounded bg-light">
-  <h6 class="mb-1">📎 Bukti Perwakilan Backup <?=h($year)?></h6>
-  <div class="small text-muted mb-3">Cukup satu bukti perwakilan untuk backup <strong>offline</strong> dan satu untuk <strong>online</strong>. Bukti ini dipakai kembali pada laporan/cetak PDF seluruh tahun, sehingga tidak perlu upload SS setiap hari.</div>
+  <h6 class="mb-1">📎 Bukti Backup <?=h($year)?></h6>
+  <div class="small text-muted mb-3">Sekarang bisa menyimpan <strong>lebih dari 2 file</strong>. Bukti dipisahkan menjadi <strong>offline</strong> dan <strong>online</strong>, dan seluruh file yang sudah diupload tetap dipakai pada laporan/cetak PDF tahun <?=h($year)?>.</div>
   <div class="row g-3">
-   <?php foreach(['offline'=>'Backup Offline','online'=>'Backup Online'] as $jenisB=>$labelB): $eb=null; foreach($backupEvidence as $x){if($x['jenis']===$jenisB){$eb=$x;break;}} ?>
+   <?php foreach(['offline'=>'Backup Offline','online'=>'Backup Online'] as $jenisB=>$labelB):
+      $ebs=array_values(array_filter($backupEvidence,fn($x)=>$x['jenis']===$jenisB)); ?>
    <div class="col-md-6">
     <div class="border rounded p-3 h-100 bg-white">
-     <strong><?=h($labelB)?></strong>
-     <?php if($eb): ?>
-       <div class="small mt-2"><a href="download_backup_evidence.php?id=<?=$eb['id']?>" target="_blank">📄 <?=h($eb['original_name'])?></a></div>
-       <div class="small text-muted"><?=h($eb['catatan']??'')?></div>
-       <div class="small text-success mt-1">✓ Digunakan pada laporan tahun <?=h($year)?></div>
+     <div class="d-flex justify-content-between align-items-center">
+      <strong><?=h($labelB)?></strong>
+      <span class="badge bg-success"><?=count($ebs)?> file</span>
+     </div>
+     <?php if($ebs): ?>
+       <div class="mt-2">
+       <?php foreach($ebs as $eb): ?>
+         <div class="small mb-1">
+           <a href="download_backup_evidence.php?id=<?=$eb['id']?>" target="_blank">📄 <?=h($eb['original_name'])?></a>
+           <span class="text-muted">(<?=round($eb['size_bytes']/1024,1)?> KB)</span>
+         </div>
+       <?php endforeach; ?>
+       </div>
+       <div class="small text-success mt-2">✓ Semua bukti digunakan pada laporan tahun <?=h($year)?></div>
      <?php else: ?>
        <div class="small text-muted mt-2">Belum ada bukti.</div>
      <?php endif; ?>
-     <form method="post" enctype="multipart/form-data" class="mt-2">
+     <form method="post" enctype="multipart/form-data" class="mt-3">
       <input type="hidden" name="action" value="upload_backup_evidence">
       <input type="hidden" name="indikator_id" value="<?=$detail['id']?>">
       <input type="hidden" name="tahun" value="<?=$year?>">
       <input type="hidden" name="jenis" value="<?=$jenisB?>">
-      <input type="file" name="backup_evidence" class="form-control form-control-sm mb-2" required accept=".pdf,.jpg,.jpeg,.png">
-      <input type="text" name="catatan_bukti_backup" value="<?=h($eb['catatan']??'')?>" class="form-control form-control-sm mb-2" placeholder="Contoh: SS Task Scheduler 03.00 dan hasil file backup tersedia">
-      <button class="btn btn-sm btn-outline-success">📎 <?= $eb?'Ganti bukti':'Upload bukti' ?></button>
+      <label class="form-label small fw-semibold">Tambah file <?=h(strtolower($labelB))?></label>
+      <input type="file" name="backup_evidence[]" class="form-control form-control-sm mb-2" required multiple accept=".pdf,.jpg,.jpeg,.png">
+      <input type="text" name="catatan_bukti_backup" class="form-control form-control-sm mb-2" placeholder="Catatan untuk file yang diupload (opsional)">
+      <div class="small text-muted mb-2">Maks. 20 file sekali upload, masing-masing 20 MB.</div>
+      <button class="btn btn-sm btn-outline-success">📎 Tambah <?=h(strtolower($labelB))?></button>
      </form>
     </div>
    </div>
