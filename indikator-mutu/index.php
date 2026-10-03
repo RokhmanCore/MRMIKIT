@@ -6,6 +6,43 @@ require_login();
 
 
 /* Pastikan tabel IM-IT-03 tersedia sebelum SELECT halaman detail. */
+/* Modul uji restore IM-IT-04 */
+$pdo->exec("CREATE TABLE IF NOT EXISTS mutu_restore_uji (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    indikator_id INT NOT NULL,
+    tanggal_uji DATE NOT NULL,
+    jenis_backup ENUM('offline','online','lainnya') NOT NULL DEFAULT 'offline',
+    sumber_backup VARCHAR(255) NULL,
+    target_restore VARCHAR(255) NULL,
+    mulai DATETIME NULL,
+    selesai DATETIME NULL,
+    durasi_detik INT NULL,
+    hasil ENUM('berhasil','gagal') NOT NULL DEFAULT 'berhasil',
+    verifikasi TEXT NULL,
+    analisis TEXT NULL,
+    tindak_lanjut TEXT NULL,
+    pic_id INT NULL,
+    created_by INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_restore_indikator_tanggal (indikator_id,tanggal_uji),
+    FOREIGN KEY (indikator_id) REFERENCES mutu_indikator(id) ON DELETE CASCADE,
+    FOREIGN KEY (pic_id) REFERENCES pic(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+$pdo->exec("CREATE TABLE IF NOT EXISTS mutu_restore_bukti (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    restore_id INT NOT NULL,
+    nama_file VARCHAR(255) NOT NULL,
+    original_name VARCHAR(255) NOT NULL,
+    mime_type VARCHAR(150) NULL,
+    size_bytes BIGINT NOT NULL DEFAULT 0,
+    catatan TEXT NULL,
+    uploaded_by INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (restore_id) REFERENCES mutu_restore_uji(id) ON DELETE CASCADE,
+    INDEX idx_restore_bukti (restore_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
 $pdo->exec("CREATE TABLE IF NOT EXISTS mutu_backup_harian (
     id INT AUTO_INCREMENT PRIMARY KEY,
     indikator_id INT NOT NULL,
@@ -43,7 +80,6 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS mutu_backup_bukti (
     uploaded_by INT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_backup_bukti (indikator_id,tahun,jenis),
     INDEX idx_backup_bukti_indikator (indikator_id,tahun)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
@@ -601,6 +637,52 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             $msg=$saved.' bukti backup '.$label.' berhasil ditambahkan untuk laporan tahun '.$tahun.'.';
         }
 
+        if ($action==='save_restore_uji') {
+            $indikator_id=(int)($_POST['indikator_id']??0);
+            $tanggal=trim((string)($_POST['tanggal_uji']??''));
+            $jenis=$_POST['jenis_backup']??'offline';
+            $hasil=$_POST['hasil']??'berhasil';
+            if($indikator_id<1 || !$tanggal || !in_array($jenis,['offline','online','lainnya'],true) || !in_array($hasil,['berhasil','gagal'],true)) throw new RuntimeException('Data uji restore tidak valid.');
+            $st=$pdo->prepare("SELECT id,kode FROM mutu_indikator WHERE id=?"); $st->execute([$indikator_id]); $ind=$st->fetch();
+            if(!$ind || $ind['kode']!=='IM-IT-04') throw new RuntimeException('Fitur ini khusus IM-IT-04.');
+            $start=trim((string)($_POST['mulai']??'')); $end=trim((string)($_POST['selesai']??''));
+            $durasi=null;
+            if($start && $end){ $a=new DateTime($start); $b=new DateTime($end); if($b<$a) throw new RuntimeException('Waktu selesai tidak boleh lebih awal dari waktu mulai.'); $durasi=$b->getTimestamp()-$a->getTimestamp(); }
+            $ins=$pdo->prepare("INSERT INTO mutu_restore_uji(indikator_id,tanggal_uji,jenis_backup,sumber_backup,target_restore,mulai,selesai,durasi_detik,hasil,verifikasi,analisis,tindak_lanjut,pic_id,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+            $ins->execute([$indikator_id,$tanggal,$jenis,trim($_POST['sumber_backup']??''),trim($_POST['target_restore']??''),$start?:null,$end?:null,$durasi,$hasil,trim($_POST['verifikasi']??''),trim($_POST['analisis']??''),trim($_POST['tindak_lanjut']??''),($_POST['pic_id']!==''?$_POST['pic_id']:null),$_SESSION['user']['id']??null]);
+            $restoreId=(int)$pdo->lastInsertId();
+
+            $files=$_FILES['restore_bukti']??null; $saved=0;
+            if($files && isset($files['name']) && is_array($files['name'])){
+                $count=count($files['name']); if($count>20) throw new RuntimeException('Maksimal 20 file bukti sekali upload.');
+                $allowed=['pdf','doc','docx','xls','xlsx','csv','jpg','jpeg','png','zip']; $max=20*1024*1024;
+                $dir=__DIR__.'/../uploads/mutu-indikator/restore-evidence';
+                if(!is_dir($dir) && !mkdir($dir,0775,true) && !is_dir($dir)) throw new RuntimeException('Folder bukti restore tidak dapat dibuat.');
+                $up=$pdo->prepare("INSERT INTO mutu_restore_bukti(restore_id,nama_file,original_name,mime_type,size_bytes,catatan,uploaded_by) VALUES(?,?,?,?,?,?,?)");
+                for($n=0;$n<$count;$n++){
+                    if(($files['error'][$n]??UPLOAD_ERR_NO_FILE)===UPLOAD_ERR_NO_FILE) continue;
+                    if(($files['error'][$n]??UPLOAD_ERR_NO_FILE)!==UPLOAD_ERR_OK) throw new RuntimeException('Salah satu file bukti gagal diunggah.');
+                    if((int)$files['size'][$n]>$max) throw new RuntimeException('Setiap file bukti maksimal 20 MB.');
+                    $original=basename((string)$files['name'][$n]); $ext=strtolower(pathinfo($original,PATHINFO_EXTENSION));
+                    if(!in_array($ext,$allowed,true)) throw new RuntimeException('Format bukti tidak didukung.');
+                    $safe=bin2hex(random_bytes(8)).'_'.preg_replace('/[^A-Za-z0-9._-]/','_',$original); $dest=$dir.'/'.$safe;
+                    if(!move_uploaded_file($files['tmp_name'][$n],$dest)) throw new RuntimeException('File bukti gagal disimpan: '.$original);
+                    $up->execute([$restoreId,$safe,$original,$files['type'][$n]??'',(int)$files['size'][$n],trim($_POST['catatan_bukti_restore']??''),$_SESSION['user']['id']??null]); $saved++;
+                }
+            }
+            $tahun=(int)date('Y',strtotime($tanggal));
+            // Capaian bulanan = jumlah uji restore berhasil / seluruh uji restore x 100.
+            $st=$pdo->prepare("SELECT COUNT(*) total, SUM(hasil='berhasil') berhasil FROM mutu_restore_uji WHERE indikator_id=? AND YEAR(tanggal_uji)=? AND MONTH(tanggal_uji)=MONTH(?)");
+            $st->execute([$indikator_id,$tahun,$tanggal]); $m=$st->fetch();
+            $total=(int)($m['total']??0); $berhasil=(int)($m['berhasil']??0); $cap=$total>0?round($berhasil/$total*100,4):null;
+            $ist=$pdo->prepare("SELECT target FROM mutu_indikator WHERE id=?"); $ist->execute([$indikator_id]); $target=$ist->fetchColumn(); $target=$target!==false&&$target!==null?(float)$target:null;
+            $status=$cap===null?'belum_dinilai':($target===null?'belum_dinilai':($cap>=$target?'tercapai':'tidak_tercapai'));
+            $periode=date('Y-m-01',strtotime($tanggal));
+            $cs=$pdo->prepare("INSERT INTO mutu_capaian(indikator_id,periode,numerator,denominator,capaian,target_snapshot,analisis,tindak_lanjut,status,created_by) VALUES(?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE numerator=VALUES(numerator),denominator=VALUES(denominator),capaian=VALUES(capaian),target_snapshot=VALUES(target_snapshot),status=VALUES(status),updated_at=CURRENT_TIMESTAMP");
+            $cs->execute([$indikator_id,$periode,$berhasil,$total,$cap,$target,'Otomatis dari '.$total.' uji restore pada bulan ini.','', $status,$_SESSION['user']['id']??null]);
+            $msg='Uji restore berhasil disimpan'.($saved?' dengan '.$saved.' bukti.':'.');
+        }
+
         if ($action==='upload_bukti') {
             $capaian_id=(int)($_POST['capaian_id']??0);
             if (!$capaian_id || empty($_FILES['bukti_file']) || $_FILES['bukti_file']['error']!==UPLOAD_ERR_OK) {
@@ -846,6 +928,14 @@ if($detailId){
    }
 
    $backupEvidence=[];
+   if($detail['kode']==='IM-IT-04'){
+       $rst=$pdo->prepare("SELECT r.*,p.nama pic_nama FROM mutu_restore_uji r LEFT JOIN pic p ON p.id=r.pic_id WHERE r.indikator_id=? AND YEAR(r.tanggal_uji)=? ORDER BY r.tanggal_uji DESC,r.id DESC");
+       $rst->execute([$detailId,$year]); $restoreRows=$rst->fetchAll();
+       $restoreByMonth=[]; foreach($restoreRows as $rr){ $restoreByMonth[(int)date('n',strtotime($rr['tanggal_uji']))][]=$rr; }
+       $restoreEvidenceById=[]; $rids=array_map(fn($r)=>(int)$r['id'],$restoreRows);
+       if($rids){$ph=implode(',',array_fill(0,count($rids),'?'));$re=$pdo->prepare("SELECT * FROM mutu_restore_bukti WHERE restore_id IN ($ph) ORDER BY created_at");$re->execute($rids);foreach($re as $rb)$restoreEvidenceById[(int)$rb['restore_id']][]=$rb;}
+   }
+
    if($detail['kode']==='IM-IT-03'){
        $est=$pdo->prepare("SELECT * FROM mutu_backup_bukti WHERE indikator_id=? AND tahun=? ORDER BY FIELD(jenis,'offline','online')");
        $est->execute([$detailId,$year]);
@@ -1084,6 +1174,39 @@ require __DIR__.'/../partials/header.php';
   </div>
  </div>
  <div class="alert alert-warning mt-3 mb-0 small"><strong>Sumber data:</strong> IM-IT-01 dan IM-IT-02 sama-sama mengambil kejadian dari tabel <strong>downtime</strong>. September, misalnya, jika tidak ada kejadian downtime dan bulannya sudah selesai, otomatis menjadi <strong>0 menit downtime</strong> pada IM-IT-02 dan <strong>100% ketersediaan</strong> pada IM-IT-01.</div>
+</div></div>
+<?php endif; ?>
+
+<?php if(($detail['kode']??'')==='IM-IT-04'): ?>
+<div class="card border-success shadow-sm mb-4"><div class="card-body">
+ <div class="d-flex justify-content-between align-items-center flex-wrap gap-2"><div><h5 class="mb-1">🔄 Uji Restore Backup</h5><div class="small text-muted">Catat setiap uji restore. Capaian bulanan dihitung otomatis: <strong>uji berhasil ÷ seluruh uji × 100%</strong>. Satu uji dapat memiliki banyak bukti.</div></div><span class="badge bg-success">IM-IT-04</span></div>
+ <form method="post" enctype="multipart/form-data" class="mt-3">
+  <input type="hidden" name="action" value="save_restore_uji"><input type="hidden" name="indikator_id" value="<?=$detail['id']?>">
+  <div class="row g-3">
+   <div class="col-md-3"><label class="form-label">Tanggal uji</label><input type="date" name="tanggal_uji" class="form-control" value="<?=h(date('Y-m-d'))?>" required></div>
+   <div class="col-md-3"><label class="form-label">Jenis backup</label><select name="jenis_backup" class="form-select"><option value="offline">Offline</option><option value="online">Online</option><option value="lainnya">Lainnya</option></select></div>
+   <div class="col-md-6"><label class="form-label">Sumber backup</label><input name="sumber_backup" class="form-control" placeholder="Contoh: backup database 03.00 / cloud backup"></div>
+   <div class="col-md-6"><label class="form-label">Target restore</label><input name="target_restore" class="form-control" placeholder="Contoh: Server uji / database SIMRS staging"></div>
+   <div class="col-md-3"><label class="form-label">Mulai</label><input type="datetime-local" name="mulai" class="form-control"></div>
+   <div class="col-md-3"><label class="form-label">Selesai</label><input type="datetime-local" name="selesai" class="form-control"></div>
+   <div class="col-md-3"><label class="form-label">Hasil</label><select name="hasil" class="form-select"><option value="berhasil">✅ Berhasil</option><option value="gagal">❌ Gagal</option></select></div>
+   <div class="col-md-3"><label class="form-label">PIC</label><select name="pic_id" class="form-select"><option value="">- pilih -</option><?php foreach($pics as $p):?><option value="<?=$p['id']?>"><?=h($p['nama'])?></option><?php endforeach;?></select></div>
+   <div class="col-md-6"><label class="form-label">Verifikasi hasil restore</label><textarea name="verifikasi" class="form-control" rows="2" placeholder="Contoh: database berhasil dibuka, jumlah tabel sesuai, data dapat dibaca"></textarea></div>
+   <div class="col-md-3"><label class="form-label">Analisis</label><textarea name="analisis" class="form-control" rows="2" placeholder="Analisis hasil uji"></textarea></div>
+   <div class="col-md-3"><label class="form-label">Tindak lanjut</label><textarea name="tindak_lanjut" class="form-control" rows="2" placeholder="RTL bila ada"></textarea></div>
+   <div class="col-md-8"><label class="form-label">Bukti uji restore</label><input type="file" name="restore_bukti[]" class="form-control" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.zip"><div class="small text-muted mt-1">Bisa upload banyak file sekaligus, maksimal 20 file, masing-masing 20 MB.</div></div>
+   <div class="col-md-4"><label class="form-label">Catatan bukti</label><input name="catatan_bukti_restore" class="form-control" placeholder="Screenshot restore, log, BA, hasil verifikasi..."></div>
+  </div><button class="btn btn-success mt-3">💾 Simpan Uji Restore</button>
+ </form>
+
+ <div class="table-responsive mt-4"><table class="table table-bordered table-sm align-middle"><thead><tr><th>Bulan</th><th>Uji</th><th>Berhasil</th><th>Gagal</th><th>Capaian</th><th>Status</th></tr></thead><tbody>
+ <?php for($rm=1;$rm<=12;$rm++): $tests=$restoreByMonth[$rm]??[]; $total=count($tests); $ok=count(array_filter($tests,fn($x)=>$x['hasil']==='berhasil')); $cap=$total?$ok/$total*100:null; $target=$detail['target']!==null?(float)$detail['target']:null; $st=$cap===null?'belum_dinilai':($target===null?'belum_dinilai':($cap>=$target?'tercapai':'tidak_tercapai')); ?>
+ <tr><td><strong><?=h($monthNames[$rm-1])?></strong></td><td><?=$total?></td><td class="text-success fw-bold"><?=$ok?></td><td class="text-danger fw-bold"><?=$total-$ok?></td><td><?=$cap!==null?h(round($cap,2).' %'):'—'?></td><td><span class="status-pill <?=($st==='tercapai'?'status-tercapai':($st==='tidak_tercapai'?'status-tidak':'status-belum'))?>"><?=h(strtoupper(str_replace('_',' ',$st)))?></span></td></tr>
+ <?php endfor; ?></tbody></table></div>
+
+ <div class="table-responsive mt-3"><table class="table table-sm align-middle"><thead><tr><th>Tanggal</th><th>Backup</th><th>Sumber</th><th>Target</th><th>Hasil</th><th>Verifikasi</th><th>Durasi</th><th>Bukti</th></tr></thead><tbody>
+ <?php if($restoreRows): foreach($restoreRows as $rt): $dur=$rt['durasi_detik']!==null?round($rt['durasi_detik']/60,1).' menit':'—'; ?><tr><td><?=h($rt['tanggal_uji'])?><div class="small text-muted"><?=h($rt['pic_nama']??'-')?></div></td><td><?=h(strtoupper($rt['jenis_backup']))?></td><td><?=h($rt['sumber_backup']??'-')?></td><td><?=h($rt['target_restore']??'-')?></td><td><span class="status-pill <?=$rt['hasil']==='berhasil'?'status-tercapai':'status-tidak'?>"><?=strtoupper(h($rt['hasil']))?></span></td><td><?=nl2br(h($rt['verifikasi']??'-'))?></td><td><?=$dur?></td><td><?php foreach(($restoreEvidenceById[(int)$rt['id']]??[]) as $rb): ?><div><a target="_blank" href="download_restore_evidence.php?id=<?=$rb['id']?>"><?=h($rb['original_name'])?></a></div><?php endforeach; if(empty($restoreEvidenceById[(int)$rt['id']])): ?><span class="text-muted">Tidak ada</span><?php endif;?></td></tr><?php endforeach; else: ?><tr><td colspan="8" class="text-muted">Belum ada uji restore.</td></tr><?php endif; ?>
+ </tbody></table></div>
 </div></div>
 <?php endif; ?>
 
