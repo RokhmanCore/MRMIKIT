@@ -87,6 +87,20 @@ if($i['kode']==='IM-IT-03'){
     $backupEvidence=$est->fetchAll();
 }
 
+/* Data uji restore IM-IT-04 dan bukti-buktinya. */
+$restoreRows=[];
+$restoreEvidence=[];
+if($i['kode']==='IM-IT-04'){
+    $st=$pdo->prepare("SELECT r.*,p.nama pic_nama FROM mutu_restore_uji r LEFT JOIN pic p ON p.id=r.pic_id WHERE r.indikator_id=? AND YEAR(r.tanggal_uji)=? ORDER BY r.tanggal_uji,r.id");
+    $st->execute([$id,$year]); $restoreRows=$st->fetchAll();
+    $rids=array_map(fn($r)=>(int)$r['id'],$restoreRows);
+    if($rids){
+        $ph=implode(',',array_fill(0,count($rids),'?'));
+        $st=$pdo->prepare("SELECT b.*,r.tanggal_uji FROM mutu_restore_bukti b JOIN mutu_restore_uji r ON r.id=b.restore_id WHERE b.restore_id IN ($ph) ORDER BY r.tanggal_uji,b.created_at");
+        $st->execute($rids); $restoreEvidence=$st->fetchAll();
+    }
+}
+
 /* Susun 12 bulan untuk laporan. */
 $reportMonths=[];$tercapai=0;$tidak=0;$cnt=0;$sum=0;
 for($m=1;$m<=12;$m++){
@@ -178,6 +192,25 @@ $colors=['tercapai'=>'#198754','tidak_tercapai'=>'#dc3545','perlu_perhatian'=>'#
 <h2><?=in_array($i['kode'],['IM-IT-01','IM-IT-02'],true)?'6':'5'?>. Bukti Pendukung</h2>
 <table><thead><tr><th>Bulan</th><th>Nama file</th><th>Catatan</th></tr></thead><tbody><?php if($bukti):foreach($bukti as $b):?><tr><td><?=h($monthNames[(int)date('n',strtotime($b['periode']))-1])?></td><td><?=h($b['original_name'])?></td><td><?=h($b['catatan']??'-')?></td></tr><?php endforeach;else:?><tr><td colspan="3">Belum ada bukti yang diunggah pada capaian.</td></tr><?php endif;?></tbody></table>
 
+<?php if($i['kode']==='IM-IT-04'): ?>
+<h2>6. Rincian Uji Restore Backup</h2>
+<div class="small">Capaian IM-IT-04 dihitung dari jumlah uji restore yang berhasil dibandingkan seluruh uji restore yang dicatat pada bulan tersebut.</div>
+<table><thead><tr><th>Tanggal</th><th>Backup</th><th>Sumber</th><th>Target restore</th><th>Mulai</th><th>Selesai</th><th>Durasi</th><th>Hasil</th><th>PIC</th></tr></thead><tbody>
+<?php if($restoreRows): foreach($restoreRows as $rt): $dur=$rt['durasi_detik']!==null?fmt($rt['durasi_detik']/60,1).' menit':'-'; ?>
+<tr><td><?=h($rt['tanggal_uji'])?></td><td><?=h(strtoupper($rt['jenis_backup']))?></td><td><?=h($rt['sumber_backup']??'-')?></td><td><?=h($rt['target_restore']??'-')?></td><td><?=h($rt['mulai']??'-')?></td><td><?=h($rt['selesai']??'-')?></td><td><?=h($dur)?></td><td class="<?=$rt['hasil']==='berhasil'?'ok':'bad'?>"><?=h(strtoupper($rt['hasil']))?></td><td><?=h($rt['pic_nama']??'-')?></td></tr>
+<tr><td colspan="9"><strong>Verifikasi:</strong> <?=nl2br(h($rt['verifikasi']??'-'))?><?php if(!empty($rt['analisis'])):?><br><strong>Analisis:</strong> <?=nl2br(h($rt['analisis']))?><?php endif;?><?php if(!empty($rt['tindak_lanjut'])):?><br><strong>RTL:</strong> <?=nl2br(h($rt['tindak_lanjut']))?><?php endif;?></td></tr>
+<?php endforeach; else: ?><tr><td colspan="9">Belum ada uji restore pada tahun <?=h($year)?>.</td></tr><?php endif; ?></tbody></table>
+
+<h2>7. Bukti Uji Restore</h2>
+<table><thead><tr><th>Tanggal uji</th><th>File bukti</th><th>Catatan</th></tr></thead><tbody>
+<?php if($restoreEvidence): foreach($restoreEvidence as $rb): ?><tr><td><?=h($rb['tanggal_uji'])?></td><td><?=h($rb['original_name'])?></td><td><?=h($rb['catatan']??'-')?></td></tr><?php endforeach; else: ?><tr><td colspan="3">Belum ada bukti uji restore.</td></tr><?php endif; ?></tbody></table>
+<?php foreach($restoreEvidence as $rb): $isImage=in_array(strtolower(pathinfo($rb['original_name'],PATHINFO_EXTENSION)),['jpg','jpeg','png'],true); ?>
+<div class="avoid-break" style="margin-top:10px"><strong><?=h($rb['tanggal_uji'])?> — <?=h($rb['original_name'])?></strong>
+<?php if($isImage): ?><div style="margin-top:6px"><img src="download_restore_evidence.php?id=<?=$rb['id']?>" alt="<?=h($rb['original_name'])?>" style="max-width:100%;max-height:260mm;border:1px solid #d7dee5;border-radius:5px"></div><?php else: ?><div class="small" style="margin-top:5px">File tersimpan sebagai bukti: <?=h($rb['original_name'])?></div><?php endif; ?>
+<?php if(!empty($rb['catatan'])):?><div class="small" style="margin-top:4px"><?=nl2br(h($rb['catatan']))?></div><?php endif; ?></div>
+<?php endforeach; ?>
+<?php endif; ?>
+
 <?php if($i['kode']==='IM-IT-03'): ?>
 <h2>6. Bukti Perwakilan Backup</h2>
 <div class="small">Bukti ini mewakili mekanisme backup offline dan online untuk tahun <?=h($year)?>. Tidak diperlukan screenshot setiap hari. Rekap harian/bulanan tetap menjadi sumber angka capaian.</div>
@@ -192,7 +225,7 @@ $colors=['tercapai'=>'#198754','tidak_tercapai'=>'#dc3545','perlu_perhatian'=>'#
 <?php endforeach; ?>
 <?php endif; ?>
 
-<h2><?=in_array($i['kode'],['IM-IT-01','IM-IT-02'],true)||$i['kode']==='IM-IT-03'?'7':'6'?>. Ringkasan</h2>
-<p>Laporan ini mengambil data langsung dari MRMIKIT untuk indikator <strong><?=h($i['kode'])?></strong> tahun <?=h($year)?>. Untuk IM-IT-01 dan IM-IT-02, perhitungan capaian dan rincian kejadian menggunakan tabel <strong>downtime</strong> yang sama sehingga dapat ditelusuri kembali ke sumber kejadian.</p>
+<h2><?=in_array($i['kode'],['IM-IT-01','IM-IT-02'],true)||in_array($i['kode'],['IM-IT-03','IM-IT-04'],true)?'7':'6'?>. Ringkasan</h2>
+<p>Laporan ini mengambil data langsung dari MRMIKIT untuk indikator <strong><?=h($i['kode'])?></strong> tahun <?=h($year)?>. Untuk IM-IT-01 dan IM-IT-02, perhitungan capaian dan rincian kejadian menggunakan tabel <strong>downtime</strong> yang sama. Untuk IM-IT-04, capaian dan bukti uji restore ditelusuri dari catatan uji restore yang tersimpan di MRMIKIT.</p>
 <div class="footer">Dicetak dari MRMIKIT · <?=date('d-m-Y H:i')?> · Laporan Indikator Mutu IT</div>
 </body></html>
