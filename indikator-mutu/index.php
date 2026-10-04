@@ -639,18 +639,46 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
 
         if ($action==='save_restore_uji') {
             $indikator_id=(int)($_POST['indikator_id']??0);
+            $restoreId=(int)($_POST['restore_id']??0);
             $tanggal=trim((string)($_POST['tanggal_uji']??''));
             $jenis=$_POST['jenis_backup']??'offline';
             $hasil=$_POST['hasil']??'berhasil';
             if($indikator_id<1 || !$tanggal || !in_array($jenis,['offline','online','lainnya'],true) || !in_array($hasil,['berhasil','gagal'],true)) throw new RuntimeException('Data uji restore tidak valid.');
             $st=$pdo->prepare("SELECT id,kode FROM mutu_indikator WHERE id=?"); $st->execute([$indikator_id]); $ind=$st->fetch();
             if(!$ind || $ind['kode']!=='IM-IT-04') throw new RuntimeException('Fitur ini khusus IM-IT-04.');
+            $source=trim((string)($_POST['sumber_backup']??''));
+            $targetRestore=trim((string)($_POST['target_restore']??''));
+            $verifikasi=trim((string)($_POST['verifikasi']??''));
+            $analisis=trim((string)($_POST['analisis']??''));
+            $tindak=trim((string)($_POST['tindak_lanjut']??''));
+            $pic=($_POST['pic_id']??'')!==''?(int)$_POST['pic_id']:null;
             $start=trim((string)($_POST['mulai']??'')); $end=trim((string)($_POST['selesai']??''));
             $durasi=null;
             if($start && $end){ $a=new DateTime($start); $b=new DateTime($end); if($b<$a) throw new RuntimeException('Waktu selesai tidak boleh lebih awal dari waktu mulai.'); $durasi=$b->getTimestamp()-$a->getTimestamp(); }
-            $ins=$pdo->prepare("INSERT INTO mutu_restore_uji(indikator_id,tanggal_uji,jenis_backup,sumber_backup,target_restore,mulai,selesai,durasi_detik,hasil,verifikasi,analisis,tindak_lanjut,pic_id,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-            $ins->execute([$indikator_id,$tanggal,$jenis,trim($_POST['sumber_backup']??''),trim($_POST['target_restore']??''),$start?:null,$end?:null,$durasi,$hasil,trim($_POST['verifikasi']??''),trim($_POST['analisis']??''),trim($_POST['tindak_lanjut']??''),($_POST['pic_id']!==''?$_POST['pic_id']:null),$_SESSION['user']['id']??null]);
-            $restoreId=(int)$pdo->lastInsertId();
+
+            if($restoreId>0){
+                $chk=$pdo->prepare("SELECT id FROM mutu_restore_uji WHERE id=? AND indikator_id=?");
+                $chk->execute([$restoreId,$indikator_id]);
+                if(!$chk->fetchColumn()) throw new RuntimeException('Data uji restore tidak ditemukan.');
+                $upRestore=$pdo->prepare("UPDATE mutu_restore_uji SET tanggal_uji=?,jenis_backup=?,sumber_backup=?,target_restore=?,mulai=?,selesai=?,durasi_detik=?,hasil=?,verifikasi=?,analisis=?,tindak_lanjut=?,pic_id=? WHERE id=? AND indikator_id=?");
+                $upRestore->execute([$tanggal,$jenis,$source,$targetRestore,$start?:null,$end?:null,$durasi,$hasil,$verifikasi,$analisis,$tindak,$pic,$restoreId,$indikator_id]);
+                $msg='Uji restore berhasil diperbarui.';
+            }else{
+                /* Cegah penyimpanan ganda akibat klik Simpan dua kali / submit ulang.
+                   Data yang benar-benar berbeda tetap boleh dicatat sebagai uji berikutnya. */
+                $dup=$pdo->prepare("SELECT id FROM mutu_restore_uji WHERE indikator_id=? AND tanggal_uji=? AND jenis_backup=? AND COALESCE(sumber_backup,'')=? AND COALESCE(target_restore,'')=? AND COALESCE(mulai,'')=? AND COALESCE(selesai,'')=? AND hasil=? LIMIT 1");
+                $dup->execute([$indikator_id,$tanggal,$jenis,$source,$targetRestore,$start?:'',$end?:'',$hasil]);
+                $existingRestore=(int)($dup->fetchColumn()?:0);
+                if($existingRestore>0){
+                    $restoreId=$existingRestore;
+                    $msg='Data uji yang sama sudah ada, jadi tidak dibuat sebagai baris kedua.';
+                }else{
+                    $ins=$pdo->prepare("INSERT INTO mutu_restore_uji(indikator_id,tanggal_uji,jenis_backup,sumber_backup,target_restore,mulai,selesai,durasi_detik,hasil,verifikasi,analisis,tindak_lanjut,pic_id,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+                    $ins->execute([$indikator_id,$tanggal,$jenis,$source,$targetRestore,$start?:null,$end?:null,$durasi,$hasil,$verifikasi,$analisis,$tindak,$pic,$_SESSION['user']['id']??null]);
+                    $restoreId=(int)$pdo->lastInsertId();
+                    $msg='Uji restore berhasil disimpan.';
+                }
+            }
 
             $files=$_FILES['restore_bukti']??null; $saved=0;
             if($files && isset($files['name']) && is_array($files['name'])){
@@ -670,17 +698,45 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
                     $up->execute([$restoreId,$safe,$original,$files['type'][$n]??'',(int)$files['size'][$n],trim($_POST['catatan_bukti_restore']??''),$_SESSION['user']['id']??null]); $saved++;
                 }
             }
+
             $tahun=(int)date('Y',strtotime($tanggal));
-            // Capaian bulanan = jumlah uji restore berhasil / seluruh uji restore x 100.
             $st=$pdo->prepare("SELECT COUNT(*) total, SUM(hasil='berhasil') berhasil FROM mutu_restore_uji WHERE indikator_id=? AND YEAR(tanggal_uji)=? AND MONTH(tanggal_uji)=MONTH(?)");
             $st->execute([$indikator_id,$tahun,$tanggal]); $m=$st->fetch();
             $total=(int)($m['total']??0); $berhasil=(int)($m['berhasil']??0); $cap=$total>0?round($berhasil/$total*100,4):null;
-            $ist=$pdo->prepare("SELECT target FROM mutu_indikator WHERE id=?"); $ist->execute([$indikator_id]); $target=$ist->fetchColumn(); $target=$target!==false&&$target!==null?(float)$target:null;
-            $status=$cap===null?'belum_dinilai':($target===null?'belum_dinilai':($cap>=$target?'tercapai':'tidak_tercapai'));
+            $ist=$pdo->prepare("SELECT target FROM mutu_indikator WHERE id=?"); $ist->execute([$indikator_id]); $target=$ist->fetchColumn(); $target=$target!==false&&$target!==null?(float)$target:100.0;
+            $status=$cap===null?'belum_dinilai':($cap>=$target?'tercapai':'tidak_tercapai');
             $periode=date('Y-m-01',strtotime($tanggal));
             $cs=$pdo->prepare("INSERT INTO mutu_capaian(indikator_id,periode,numerator,denominator,capaian,target_snapshot,analisis,tindak_lanjut,status,created_by) VALUES(?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE numerator=VALUES(numerator),denominator=VALUES(denominator),capaian=VALUES(capaian),target_snapshot=VALUES(target_snapshot),status=VALUES(status),updated_at=CURRENT_TIMESTAMP");
             $cs->execute([$indikator_id,$periode,$berhasil,$total,$cap,$target,'Otomatis dari '.$total.' uji restore pada bulan ini.','', $status,$_SESSION['user']['id']??null]);
-            $msg='Uji restore berhasil disimpan'.($saved?' dengan '.$saved.' bukti.':'.');
+            $msg.=($saved?' '.$saved.' bukti ditambahkan.':'');
+        }
+
+        if($action==='delete_restore_uji'){
+            $restoreId=(int)($_POST['restore_id']??0);
+            $indikator_id=(int)($_POST['indikator_id']??0);
+            $st=$pdo->prepare("SELECT id,tanggal_uji FROM mutu_restore_uji WHERE id=? AND indikator_id=?");
+            $st->execute([$restoreId,$indikator_id]); $restore=$st->fetch();
+            if(!$restore) throw new RuntimeException('Data uji restore tidak ditemukan.');
+            $ev=$pdo->prepare("SELECT nama_file FROM mutu_restore_bukti WHERE restore_id=?");
+            $ev->execute([$restoreId]); $dir=__DIR__.'/../uploads/mutu-indikator/restore-evidence';
+            foreach($ev as $e){ $file=$dir.'/'.$e['nama_file']; if(is_file($file)) @unlink($file); }
+            $pdo->prepare("DELETE FROM mutu_restore_uji WHERE id=? AND indikator_id=?")->execute([$restoreId,$indikator_id]);
+
+            $tahun=(int)date('Y',strtotime($restore['tanggal_uji']));
+            $mes=(int)date('n',strtotime($restore['tanggal_uji']));
+            $st=$pdo->prepare("SELECT COUNT(*) total,SUM(hasil='berhasil') berhasil FROM mutu_restore_uji WHERE indikator_id=? AND YEAR(tanggal_uji)=? AND MONTH(tanggal_uji)=?");
+            $st->execute([$indikator_id,$tahun,$mes]); $m=$st->fetch();
+            $total=(int)($m['total']??0); $berhasil=(int)($m['berhasil']??0);
+            $target=(float)($pdo->query("SELECT COALESCE(target,100) FROM mutu_indikator WHERE id=".(int)$indikator_id)->fetchColumn());
+            $periode=sprintf('%04d-%02d-01',$tahun,$mes);
+            if($total>0){
+                $cap=round($berhasil/$total*100,4); $status=$cap>=$target?'tercapai':'tidak_tercapai';
+                $pdo->prepare("INSERT INTO mutu_capaian(indikator_id,periode,numerator,denominator,capaian,target_snapshot,status,created_by) VALUES(?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE numerator=VALUES(numerator),denominator=VALUES(denominator),capaian=VALUES(capaian),target_snapshot=VALUES(target_snapshot),status=VALUES(status),updated_at=CURRENT_TIMESTAMP")
+                    ->execute([$indikator_id,$periode,$berhasil,$total,$cap,$target,$status,$_SESSION['user']['id']??null]);
+            }else{
+                $pdo->prepare("DELETE FROM mutu_capaian WHERE indikator_id=? AND periode=?")->execute([$indikator_id,$periode]);
+            }
+            $msg='Uji restore berhasil dihapus.';
         }
 
         if ($action==='upload_bukti') {
