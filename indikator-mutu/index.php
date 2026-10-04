@@ -1051,6 +1051,15 @@ if($detailId){
        $rst=$pdo->prepare("SELECT r.*,p.nama pic_nama FROM mutu_restore_uji r LEFT JOIN pic p ON p.id=r.pic_id WHERE r.indikator_id=? AND YEAR(r.tanggal_uji)=? ORDER BY r.tanggal_uji DESC,r.id DESC");
        $rst->execute([$detailId,$year]); $restoreRows=$rst->fetchAll();
        $restoreByMonth=[]; foreach($restoreRows as $rr){ $restoreByMonth[(int)date('n',strtotime($rr['tanggal_uji']))][]=$rr; }
+       $editRestore=null;
+       if(isset($_GET['edit_restore'])){
+           $eri=(int)$_GET['edit_restore'];
+           if($eri>0){
+               $erq=$pdo->prepare("SELECT * FROM mutu_restore_uji WHERE id=? AND indikator_id=?");
+               $erq->execute([$eri,$detailId]);
+               $editRestore=$erq->fetch() ?: null;
+           }
+       }
        $restoreEvidenceById=[]; $rids=array_map(fn($r)=>(int)$r['id'],$restoreRows);
        if($rids){$ph=implode(',',array_fill(0,count($rids),'?'));$re=$pdo->prepare("SELECT * FROM mutu_restore_bukti WHERE restore_id IN ($ph) ORDER BY created_at");$re->execute($rids);foreach($re as $rb)$restoreEvidenceById[(int)$rb['restore_id']][]=$rb;}
    }
@@ -1299,23 +1308,26 @@ require __DIR__.'/../partials/header.php';
 <?php if(($detail['kode']??'')==='IM-IT-04'): ?>
 <div class="card border-success shadow-sm mb-4"><div class="card-body">
  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2"><div><h5 class="mb-1">🔄 Uji Restore Backup</h5><div class="small text-muted">Catat setiap uji restore. Capaian bulanan dihitung otomatis: <strong>uji berhasil ÷ seluruh uji × 100%</strong>. Satu uji dapat memiliki banyak bukti.</div></div><span class="badge bg-success">IM-IT-04</span></div>
- <form method="post" enctype="multipart/form-data" class="mt-3">
+ <form id="formRestore" method="post" enctype="multipart/form-data" class="mt-3">
   <input type="hidden" name="action" value="save_restore_uji"><input type="hidden" name="indikator_id" value="<?=$detail['id']?>">
+  <?php if($editRestore): ?><input type="hidden" name="restore_id" value="<?=$editRestore['id']?>"><?php endif; ?>
   <div class="row g-3">
-   <div class="col-md-3"><label class="form-label">Tanggal uji</label><input type="date" name="tanggal_uji" class="form-control" value="<?=h(date('Y-m-d'))?>" required></div>
-   <div class="col-md-3"><label class="form-label">Jenis backup</label><select name="jenis_backup" class="form-select"><option value="offline">Offline</option><option value="online">Online</option><option value="lainnya">Lainnya</option></select></div>
-   <div class="col-md-6"><label class="form-label">Sumber backup</label><input name="sumber_backup" class="form-control" placeholder="Contoh: backup database 03.00 / cloud backup"></div>
-   <div class="col-md-6"><label class="form-label">Target restore</label><input name="target_restore" class="form-control" placeholder="Contoh: Server uji / database SIMRS staging"></div>
-   <div class="col-md-3"><label class="form-label">Mulai</label><input type="datetime-local" name="mulai" class="form-control"></div>
-   <div class="col-md-3"><label class="form-label">Selesai</label><input type="datetime-local" name="selesai" class="form-control"></div>
-   <div class="col-md-3"><label class="form-label">Hasil</label><select name="hasil" class="form-select"><option value="berhasil">✅ Berhasil</option><option value="gagal">❌ Gagal</option></select></div>
-   <div class="col-md-3"><label class="form-label">PIC</label><select name="pic_id" class="form-select"><option value="">- pilih -</option><?php foreach($pics as $p):?><option value="<?=$p['id']?>"><?=h($p['nama'])?></option><?php endforeach;?></select></div>
-   <div class="col-md-6"><label class="form-label">Verifikasi hasil restore</label><textarea name="verifikasi" class="form-control" rows="2" placeholder="Contoh: database berhasil dibuka, jumlah tabel sesuai, data dapat dibaca"></textarea></div>
-   <div class="col-md-3"><label class="form-label">Analisis</label><textarea name="analisis" class="form-control" rows="2" placeholder="Analisis hasil uji"></textarea></div>
-   <div class="col-md-3"><label class="form-label">Tindak lanjut</label><textarea name="tindak_lanjut" class="form-control" rows="2" placeholder="RTL bila ada"></textarea></div>
-   <div class="col-md-8"><label class="form-label">Bukti uji restore</label><input type="file" name="restore_bukti[]" class="form-control" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.zip"><div class="small text-muted mt-1">Bisa upload banyak file sekaligus, maksimal 20 file, masing-masing 20 MB.</div></div>
+   <div class="col-md-3"><label class="form-label">Tanggal uji</label><input type="date" name="tanggal_uji" class="form-control" value="<?=h($editRestore['tanggal_uji']??date('Y-m-d'))?>" required></div>
+   <div class="col-md-3"><label class="form-label">Jenis backup</label><select name="jenis_backup" class="form-select"><option value="offline" <?=($editRestore['jenis_backup']??'offline')==='offline'?'selected':''?>>Offline</option><option value="online" <?=($editRestore['jenis_backup']??'')==='online'?'selected':''?>>Online</option><option value="lainnya" <?=($editRestore['jenis_backup']??'')==='lainnya'?'selected':''?>>Lainnya</option></select></div>
+   <div class="col-md-6"><label class="form-label">Sumber backup</label><input name="sumber_backup" class="form-control" value="<?=h($editRestore['sumber_backup']??'')?>" placeholder="Contoh: backup database 03.00 / cloud backup"></div>
+   <div class="col-md-6"><label class="form-label">Target restore</label><input name="target_restore" class="form-control" value="<?=h($editRestore['target_restore']??'')?>" placeholder="Contoh: Server uji / database SIMRS staging"></div>
+   <div class="col-md-3"><label class="form-label">Mulai</label><input type="datetime-local" name="mulai" class="form-control" value="<?=h($editRestore['mulai']?str_replace(' ','T',substr($editRestore['mulai'],0,16)):'')?>"></div>
+   <div class="col-md-3"><label class="form-label">Selesai</label><input type="datetime-local" name="selesai" class="form-control" value="<?=h($editRestore['selesai']?str_replace(' ','T',substr($editRestore['selesai'],0,16)):'')?>"></div>
+   <div class="col-md-3"><label class="form-label">Hasil</label><select name="hasil" class="form-select"><option value="berhasil" <?=($editRestore['hasil']??'berhasil')==='berhasil'?'selected':''?>>✅ Berhasil</option><option value="gagal" <?=($editRestore['hasil']??'')==='gagal'?'selected':''?>>❌ Gagal</option></select></div>
+   <div class="col-md-3"><label class="form-label">PIC</label><select name="pic_id" class="form-select"><option value="">- pilih -</option><?php foreach($pics as $p):?><option value="<?=$p['id']?>" <?=((string)($editRestore['pic_id']??'')===(string)$p['id'])?'selected':''?>><?=h($p['nama'])?></option><?php endforeach;?></select></div>
+   <div class="col-md-6"><label class="form-label">Verifikasi hasil restore</label><textarea name="verifikasi" class="form-control" rows="2" placeholder="Contoh: database berhasil dibuka, jumlah tabel sesuai, data dapat dibaca"><?=h($editRestore['verifikasi']??'')?></textarea></div>
+   <div class="col-md-3"><label class="form-label">Analisis</label><textarea name="analisis" class="form-control" rows="2" placeholder="Analisis hasil uji"><?=h($editRestore['analisis']??'')?></textarea></div>
+   <div class="col-md-3"><label class="form-label">Tindak lanjut</label><textarea name="tindak_lanjut" class="form-control" rows="2" placeholder="RTL bila ada"><?=h($editRestore['tindak_lanjut']??'')?></textarea></div>
+   <div class="col-md-8"><label class="form-label">Bukti uji restore</label><input type="file" name="restore_bukti[]" class="form-control" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.zip"><div class="small text-muted mt-1"><?= $editRestore ? 'Upload tambahan bila diperlukan. Bukti lama tetap tersimpan.' : 'Bisa upload banyak file sekaligus.' ?> Maksimal 20 file, masing-masing 20 MB.</div></div>
    <div class="col-md-4"><label class="form-label">Catatan bukti</label><input name="catatan_bukti_restore" class="form-control" placeholder="Screenshot restore, log, BA, hasil verifikasi..."></div>
-  </div><button class="btn btn-success mt-3">💾 Simpan Uji Restore</button>
+  </div>
+  <button class="btn btn-success mt-3"><?= $editRestore ? '💾 Simpan Perubahan' : '💾 Simpan Uji Restore' ?></button>
+  <?php if($editRestore): ?><a class="btn btn-outline-secondary mt-3" href="?detail=<?=$detail['id']?>&tahun=<?=$year?>">Batal Edit</a><?php endif; ?>
  </form>
 
  <div class="table-responsive mt-4"><table class="table table-bordered table-sm align-middle"><thead><tr><th>Bulan</th><th>Uji</th><th>Berhasil</th><th>Gagal</th><th>Capaian</th><th>Status</th></tr></thead><tbody>
@@ -1323,8 +1335,14 @@ require __DIR__.'/../partials/header.php';
  <tr><td><strong><?=h($monthNames[$rm-1])?></strong></td><td><?=$total?></td><td class="text-success fw-bold"><?=$ok?></td><td class="text-danger fw-bold"><?=$total-$ok?></td><td><?=$cap!==null?h(round($cap,2).' %'):'—'?></td><td><span class="status-pill <?=($st==='tercapai'?'status-tercapai':($st==='tidak_tercapai'?'status-tidak':'status-belum'))?>"><?=h(strtoupper(str_replace('_',' ',$st)))?></span></td></tr>
  <?php endfor; ?></tbody></table></div>
 
- <div class="table-responsive mt-3"><table class="table table-sm align-middle"><thead><tr><th>Tanggal</th><th>Backup</th><th>Sumber</th><th>Target</th><th>Hasil</th><th>Verifikasi</th><th>Durasi</th><th>Bukti</th></tr></thead><tbody>
- <?php if($restoreRows): foreach($restoreRows as $rt): $dur=$rt['durasi_detik']!==null?round($rt['durasi_detik']/60,1).' menit':'—'; ?><tr><td><?=h($rt['tanggal_uji'])?><div class="small text-muted"><?=h($rt['pic_nama']??'-')?></div></td><td><?=h(strtoupper($rt['jenis_backup']))?></td><td><?=h($rt['sumber_backup']??'-')?></td><td><?=h($rt['target_restore']??'-')?></td><td><span class="status-pill <?=$rt['hasil']==='berhasil'?'status-tercapai':'status-tidak'?>"><?=strtoupper(h($rt['hasil']))?></span></td><td><?=nl2br(h($rt['verifikasi']??'-'))?></td><td><?=$dur?></td><td><?php foreach(($restoreEvidenceById[(int)$rt['id']]??[]) as $rb): ?><div><a target="_blank" href="download_restore_evidence.php?id=<?=$rb['id']?>"><?=h($rb['original_name'])?></a></div><?php endforeach; if(empty($restoreEvidenceById[(int)$rt['id']])): ?><span class="text-muted">Tidak ada</span><?php endif;?></td></tr><?php endforeach; else: ?><tr><td colspan="8" class="text-muted">Belum ada uji restore.</td></tr><?php endif; ?>
+ <div class="table-responsive mt-3"><table class="table table-sm align-middle"><thead><tr><th>Tanggal</th><th>Backup</th><th>Sumber</th><th>Target</th><th>Hasil</th><th>Verifikasi</th><th>Durasi</th><th>Bukti</th><th>Aksi</th></tr></thead><tbody>
+ <?php if($restoreRows): foreach($restoreRows as $rt): $dur=$rt['durasi_detik']!==null?round($rt['durasi_detik']/60,1).' menit':'—'; ?><tr><td><?=h($rt['tanggal_uji'])?><div class="small text-muted"><?=h($rt['pic_nama']??'-')?></div></td><td><?=h(strtoupper($rt['jenis_backup']))?></td><td><?=h($rt['sumber_backup']??'-')?></td><td><?=h($rt['target_restore']??'-')?></td><td><span class="status-pill <?=$rt['hasil']==='berhasil'?'status-tercapai':'status-tidak'?>"><?=strtoupper(h($rt['hasil']))?></span></td><td><?=nl2br(h($rt['verifikasi']??'-'))?></td><td><?=$dur?></td><td><?php foreach(($restoreEvidenceById[(int)$rt['id']]??[]) as $rb): ?><div><a target="_blank" href="download_restore_evidence.php?id=<?=$rb['id']?>"><?=h($rb['original_name'])?></a></div><?php endforeach; if(empty($restoreEvidenceById[(int)$rt['id']])): ?><span class="text-muted">Tidak ada</span><?php endif;?></td><td class="text-nowrap">
+ <a class="btn btn-sm btn-outline-primary" href="?detail=<?=$detail['id']?>&tahun=<?=$year?>&edit_restore=<?=$rt['id']?>#formRestore">✏️ Edit</a>
+ <form method="post" class="d-inline" onsubmit="return confirm('Hapus uji restore tanggal <?=h($rt['tanggal_uji'])?>? Data capaian bulan terkait juga akan dihitung ulang.');">
+  <input type="hidden" name="action" value="delete_restore_uji"><input type="hidden" name="indikator_id" value="<?=$detail['id']?>"><input type="hidden" name="restore_id" value="<?=$rt['id']?>">
+  <button class="btn btn-sm btn-outline-danger">🗑️ Hapus</button>
+ </form>
+</td></tr><?php endforeach; else: ?><tr><td colspan="9" class="text-muted">Belum ada uji restore.</td></tr><?php endif; ?>
  </tbody></table></div>
 </div></div>
 <?php endif; ?>
