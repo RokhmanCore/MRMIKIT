@@ -683,7 +683,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
             $files=$_FILES['restore_bukti']??null; $saved=0;
             if($files && isset($files['name']) && is_array($files['name'])){
                 $count=count($files['name']); if($count>20) throw new RuntimeException('Maksimal 20 file bukti sekali upload.');
-                $allowed=['pdf','doc','docx','xls','xlsx','csv','jpg','jpeg','png','zip']; $max=20*1024*1024;
+                $allowed=['pdf','doc','docx','xls','xlsx','csv','txt','log','jpg','jpeg','png','zip']; $max=20*1024*1024;
                 $dir=__DIR__.'/../uploads/mutu-indikator/restore-evidence';
                 if(!is_dir($dir) && !mkdir($dir,0775,true) && !is_dir($dir)) throw new RuntimeException('Folder bukti restore tidak dapat dibuat.');
                 $up=$pdo->prepare("INSERT INTO mutu_restore_bukti(restore_id,nama_file,original_name,mime_type,size_bytes,catatan,uploaded_by) VALUES(?,?,?,?,?,?,?)");
@@ -1324,7 +1324,7 @@ require __DIR__.'/../partials/header.php';
    <div class="col-md-3"><label class="form-label">Analisis</label><textarea name="analisis" class="form-control" rows="2" placeholder="Analisis hasil uji"><?=h($editRestore['analisis']??'')?></textarea></div>
    <div class="col-md-3"><label class="form-label">Tindak lanjut</label><textarea name="tindak_lanjut" class="form-control" rows="2" placeholder="RTL bila ada"><?=h($editRestore['tindak_lanjut']??'')?></textarea></div>
    <div class="col-md-8"><label class="form-label">Bukti uji restore</label><input type="file" name="restore_bukti[]" class="form-control" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.zip"><div class="small text-muted mt-1"><?= $editRestore ? 'Upload tambahan bila diperlukan. Bukti lama tetap tersimpan.' : 'Bisa upload banyak file sekaligus.' ?> Maksimal 20 file, masing-masing 20 MB.</div></div>
-   <div class="col-md-4"><label class="form-label">Catatan bukti</label><input name="catatan_bukti_restore" class="form-control" placeholder="Screenshot restore, log, BA, hasil verifikasi..."></div>
+   <div class="col-md-4"><label class="form-label">Catatan bukti</label><input name="catatan_bukti_restore" class="form-control" placeholder="Screenshot restore, log, hasil verifikasi..."></div>
   </div>
   <button class="btn btn-success mt-3"><?= $editRestore ? '💾 Simpan Perubahan' : '💾 Simpan Uji Restore' ?></button>
   <?php if($editRestore): ?><a class="btn btn-outline-secondary mt-3" href="?detail=<?=$detail['id']?>&tahun=<?=$year?>">Batal Edit</a><?php endif; ?>
