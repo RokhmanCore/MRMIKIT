@@ -905,6 +905,69 @@ foreach($indikators as &$ii){
         }
     }
 
+    
+    /*
+     * IM-IT-04: heatmap membaca langsung hasil uji restore.
+     * 1 uji berhasil = 100%, uji gagal = 0%.
+     * Jika tidak ada uji pada suatu bulan, bulan tetap kosong/abu-abu.
+     * Hanya blok IM-IT-04 yang diproses di sini; IM-IT-01 s/d IM-IT-03 tidak diubah.
+     */
+    if(($ii['kode']??'')==='IM-IT-04'){
+        $rst=$pdo->prepare("
+            SELECT MONTH(tanggal_uji) bulan,
+                   COUNT(*) jumlah_uji,
+                   SUM(CASE WHEN hasil='berhasil' THEN 1 ELSE 0 END) berhasil
+            FROM mutu_restore_uji
+            WHERE indikator_id=? AND YEAR(tanggal_uji)=?
+            GROUP BY MONTH(tanggal_uji)
+        ");
+        $rst->execute([(int)$ii['id'],$year]);
+
+        $restoreMap=[];
+        foreach($rst as $rr){
+            $restoreMap[(int)$rr['bulan']]=[
+                'jumlah'=>(int)$rr['jumlah_uji'],
+                'berhasil'=>(int)$rr['berhasil']
+            ];
+        }
+
+        /*
+         * Target IM-IT-04 adalah 100% bila kolom target belum diisi.
+         * Ini membuat capaian 100% yang sudah ada tetap berstatus TER CAPAI.
+         */
+        $target=($ii['target']!==null && $ii['target']!=='')
+            ? (float)$ii['target'] : 100.0;
+
+        $latest=null;
+        for($rm=1;$rm<=12;$rm++){
+            if(isset($restoreMap[$rm]) && $restoreMap[$rm]['jumlah']>0){
+                $value=round(($restoreMap[$rm]['berhasil']/$restoreMap[$rm]['jumlah'])*100,4);
+                $status=$value >= $target ? 'tercapai' : 'tidak_tercapai';
+                $m[$rm]=['capaian'=>$value,'status'=>$status];
+
+                if($year < (int)date('Y') || ($year===(int)date('Y') && $rm < (int)date('n'))){
+                    $latest=['capaian'=>$value,'status'=>$status,'bulan'=>$rm];
+                }
+            } elseif(isset($m[$rm]) && $m[$rm]['capaian']!==null && $m[$rm]['capaian']!==''){
+                /*
+                 * Kompatibilitas dengan capaian IM-IT-04 yang sudah pernah
+                 * disimpan sebelum modul uji restore digunakan.
+                 */
+                $value=(float)$m[$rm]['capaian'];
+                $m[$rm]['status']=$value >= $target ? 'tercapai' : 'tidak_tercapai';
+                if($year < (int)date('Y') || ($year===(int)date('Y') && $rm < (int)date('n'))){
+                    $latest=['capaian'=>$value,'status'=>$m[$rm]['status'],'bulan'=>$rm];
+                }
+            }
+        }
+
+        if($latest){
+            $ii['capaian_terakhir']=$latest['capaian'];
+            $ii['status_terakhir']=$latest['status'];
+            $ii['jumlah_periode']=$latest['bulan'];
+        }
+    }
+
     $heatmapData[(int)$ii['id']]=$m;
 }
 unset($ii);
