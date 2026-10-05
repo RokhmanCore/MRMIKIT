@@ -248,8 +248,11 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
                     $a=new DateTime($start);$b=new DateTime($sel);
                     $dur=round(($b->getTimestamp()-$a->getTimestamp())/60,2);
                 }
-                if($ss===null){
-                    $ss=$dur!==null?($dur<=$sla?'sesuai':'tidak_sesuai'):'belum_dinilai';
+                if($dur!==null){
+                    // Durasi aktual/rekonstruksi menjadi sumber penilaian SLA.
+                    $ss=$dur<=$sla?'sesuai':'tidak_sesuai';
+                }else{
+                    $ss='belum_dinilai';
                 }
                 if($dur!==null && $dur<0){$dur=null;$sel=null;$status='open';$ss='belum_dinilai';}
 
