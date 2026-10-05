@@ -229,9 +229,11 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
             foreach($selected as $idx){
                 $idx=(int)$idx;if(!isset($preview[$idx]))continue;$r=$preview[$idx];
 
+                $manualLapor=trim((string)($_POST['jam_lapor'][$idx]??''));
                 $manualStart=trim((string)($_POST['jam_mulai'][$idx]??''));
                 $manualFinish=trim((string)($_POST['jam_selesai'][$idx]??''));
                 $sourceWaktu=trim((string)($_POST['source_waktu'][$idx]??''));
+                $lapor=$manualLapor!==''?parseDateTimeValue(str_replace('T',' ',$manualLapor).':00'):$r['tanggal_lapor'];
                 $start=$manualStart!==''?parseDateTimeValue(str_replace('T',' ',$manualStart).':00'):$r['tanggal_mulai'];
                 $sel=$manualFinish!==''?parseDateTimeValue(str_replace('T',' ',$manualFinish).':00'):$r['tanggal_selesai'];
                 $dur=$r['durasi_menit'];
@@ -273,7 +275,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
 
                 $nomor='MTN-'.date('YmdHis').'-'.random_int(10,99);
                 $ins->execute([
-                    $nomor,$r['tanggal_lapor'],$sel,$r['unit_pelapor'],$r['pelapor'],$r['masalah'],
+                    $nomor,$lapor,$sel,$r['unit_pelapor'],$r['pelapor'],$r['masalah'],
                     $r['prioritas'],$sla,$dur,$status,$ss,$r['penyelesaian'],$picId,
                     'laporan',$catatanText,$sourceWaktu,$_SESSION['user']['id']??null
                 ]);
@@ -305,7 +307,7 @@ $page_title='Import Laporan Maintenance';require __DIR__.'/../partials/header.ph
 <input type="hidden" name="action" value="save">
 <div class="row g-2 mb-3">
  <div class="col-md-3"><label class="form-label">SLA default (menit)</label><input name="default_sla" type="number" min="1" value="240" class="form-control"></div>
- <div class="col-md-9 small text-muted d-flex align-items-end">Jika Word tidak memiliki SLA, nilai ini dipakai. Jika Word sudah memiliki SLA, nilai Word diprioritaskan. Status SLA dari Word juga dipertahankan.</div>
+ <div class="col-md-9 small text-muted d-flex align-items-end">Jam Lapor, Jam Mulai, dan Jam Selesai dapat dikoreksi langsung pada tabel Preview. Jika waktunya berasal dari ingatan/konfirmasi petugas, pilih sumber waktu yang sesuai. Jika Word tidak memiliki SLA, nilai ini dipakai. Jika Word sudah memiliki SLA, nilai Word diprioritaskan. Status SLA dari Word juga dipertahankan.</div>
 </div>
 <div class="table-responsive"><table class="table table-sm table-bordered align-middle"><thead><tr>
 <th><input type="checkbox" checked onclick="document.querySelectorAll('.pick').forEach(x=>x.checked=this.checked)"></th>
@@ -314,7 +316,7 @@ $page_title='Import Laporan Maintenance';require __DIR__.'/../partials/header.ph
 <?php foreach($preview as $n=>$r):?>
 <tr>
 <td><input class="pick" type="checkbox" name="selected[]" value="<?=$n?>" checked></td>
-<td><?=h($r['tanggal_lapor'])?></td>
+<td><input class="form-control form-control-sm" type="datetime-local" name="jam_lapor[<?=$n?>]" value="<?=h($r['tanggal_lapor']?date('Y-m-d\\TH:i',strtotime($r['tanggal_lapor'])):'')?>"></td>
 <td><input class="form-control form-control-sm" type="datetime-local" name="jam_mulai[<?=$n?>]" value="<?=h($r['tanggal_mulai']?date('Y-m-d\\TH:i',strtotime($r['tanggal_mulai'])):'')?>"></td>
 <td><input class="form-control form-control-sm" type="datetime-local" name="jam_selesai[<?=$n?>]" value="<?=h($r['tanggal_selesai']?date('Y-m-d\\TH:i',strtotime($r['tanggal_selesai'])):'')?>"></td>
 <td><?=h($r['unit_pelapor'])?></td><td><?=h($r['masalah'])?></td>
