@@ -825,6 +825,27 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS helpdesk_insiden (
 
 $im05Id=(int)($pdo->query("SELECT id FROM mutu_indikator WHERE kode='IM-IT-05' AND aktif=1 LIMIT 1")->fetchColumn()?:0);
 if($im05Id>0){
+    $pdo->prepare("UPDATE mutu_indikator SET
+        definisi_operasional=CASE WHEN definisi_operasional IS NULL OR TRIM(definisi_operasional)='' THEN ? ELSE definisi_operasional END,
+        numerator_label=CASE WHEN numerator_label IS NULL OR TRIM(numerator_label)='' THEN ? ELSE numerator_label END,
+        denominator_label=CASE WHEN denominator_label IS NULL OR TRIM(denominator_label)='' THEN ? ELSE denominator_label END,
+        formula=CASE WHEN formula IS NULL OR TRIM(formula)='' THEN ? ELSE formula END,
+        satuan=CASE WHEN satuan IS NULL OR TRIM(satuan)='' THEN '%' ELSE satuan END,
+        arah='naik',
+        frekuensi='bulanan',
+        sumber_data=CASE WHEN sumber_data IS NULL OR TRIM(sumber_data)='' THEN ? ELSE sumber_data END,
+        metode_pengumpulan=CASE WHEN metode_pengumpulan IS NULL OR TRIM(metode_pengumpulan)='' THEN ? ELSE metode_pengumpulan END
+        WHERE id=?")->execute([
+        'Jumlah insiden TI yang selesai sesuai SLA dibandingkan seluruh insiden TI yang selesai/dicatat pada periode pengukuran.',
+        'Jumlah insiden TI yang selesai sesuai SLA',
+        'Jumlah seluruh insiden TI yang dicatat pada periode pengukuran',
+        '(Jumlah insiden selesai sesuai SLA / jumlah seluruh insiden) × 100%',
+        'Helpdesk IT, tiket, WhatsApp, laporan unit, dan bukti penyelesaian',
+        'Pencatatan insiden; penetapan SLA; perhitungan durasi laporan-selesai; verifikasi bukti; rekap bulanan otomatis.',
+        $im05Id
+    ]);
+}
+if($im05Id>0){
     $target05=$pdo->query("SELECT target FROM mutu_indikator WHERE id=".$im05Id)->fetchColumn();
     $target05=$target05!==false && $target05!==null ? (float)$target05 : null;
     $currentYear=(int)date('Y'); $currentMonth=(int)date('n');
