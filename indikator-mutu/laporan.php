@@ -115,6 +115,35 @@ if($i['kode']==='IM-IT-04'){
     }
 }
 
+/* Data Helpdesk IM-IT-05. */
+$helpdeskRows=[];
+if($i['kode']==='IM-IT-05'){
+    $pdo->exec("CREATE TABLE IF NOT EXISTS helpdesk_insiden (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nomor VARCHAR(50) NOT NULL UNIQUE,
+        tanggal_lapor DATETIME NOT NULL,
+        tanggal_selesai DATETIME NULL,
+        unit_pelapor VARCHAR(150) NULL,
+        pelapor VARCHAR(150) NULL,
+        masalah TEXT NOT NULL,
+        prioritas ENUM('kritikal','tinggi','sedang','rendah') NOT NULL DEFAULT 'sedang',
+        sla_menit INT NOT NULL DEFAULT 240,
+        durasi_menit DECIMAL(12,2) NULL,
+        status ENUM('open','selesai','batal') NOT NULL DEFAULT 'open',
+        status_sla ENUM('sesuai','tidak_sesuai','belum_dinilai') NOT NULL DEFAULT 'belum_dinilai',
+        penyelesaian TEXT NULL,
+        pic_id INT NULL,
+        sumber VARCHAR(50) NOT NULL DEFAULT 'whatsapp',
+        catatan TEXT NULL,
+        created_by INT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_helpdesk_tanggal(tanggal_lapor)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $hst=$pdo->prepare("SELECT h.*,p.nama pic_nama FROM helpdesk_insiden h LEFT JOIN pic p ON p.id=h.pic_id WHERE YEAR(h.tanggal_lapor)=? ORDER BY h.tanggal_lapor,h.id");
+    $hst->execute([$year]);$helpdeskRows=$hst->fetchAll();
+}
+
 /* Susun 12 bulan untuk laporan. */
 $reportMonths=[];$tercapai=0;$tidak=0;$cnt=0;$sum=0;
 for($m=1;$m<=12;$m++){
@@ -127,6 +156,24 @@ for($m=1;$m<=12;$m++){
         $r['capaian']=$auto['capaian'];
         $r['target_snapshot']=$i['target'];
         $r['status']=$auto['status'];
+    }
+    if($i['kode']==='IM-IT-05'){
+        $hMonth=array_filter($helpdeskRows,fn($x)=>(int)date('n',strtotime($x['tanggal_lapor']))===$m);
+        $total=count($hMonth);
+        $sesuai=count(array_filter($hMonth,fn($x)=>$x['status']==='selesai'&&$x['status_sla']==='sesuai'));
+        if($total>0){
+            $cap=round(($sesuai/$total)*100,4);
+            $r=$r?:[];
+            $r['numerator']=$sesuai;
+            $r['denominator']=$total;
+            $r['capaian']=$cap;
+            $r['target_snapshot']=$i['target'];
+            $r['status']=$i['target']===null?'belum_dinilai':($cap>=(float)$i['target']?'tercapai':'tidak_tercapai');
+            $r['analisis']="Otomatis dari Helpdesk IT: {$sesuai} dari {$total} insiden selesai sesuai SLA.";
+            $r['tindak_lanjut']='Tinjau insiden yang melewati SLA dan lakukan RTL sesuai kebutuhan.';
+        }else{
+            $r=null;
+        }
     }
     $reportMonths[$m]=$r;
     if($r&&$r['capaian']!==null){$sum+=(float)$r['capaian'];$cnt++;}
@@ -255,6 +302,55 @@ $colors=['tercapai'=>'#198754','tidak_tercapai'=>'#dc3545','perlu_perhatian'=>'#
 <?php endforeach; ?>
 <?php endif; ?>
 
+<?php if($i['kode']==='IM-IT-05'): ?>
+<h2>5. Rincian Insiden TI dan SLA</h2>
+<div class="small">Sumber: menu <strong>Helpdesk IT &amp; SLA</strong>. Capaian bulanan dihitung dari insiden yang selesai sesuai SLA dibandingkan seluruh insiden yang dicatat pada bulan tersebut. Jika tidak ada insiden, bulan tidak dianggap 100%.</div>
+<table><thead><tr><th>Nomor</th><th>Tanggal laporan</th><th>Masalah</th><th>Prioritas</th><th>SLA</th><th>Selesai</th><th>Durasi</th><th>Status SLA</th><th>PIC</th><th>Sumber</th></tr></thead><tbody>
+<?php if($helpdeskRows): foreach($helpdeskRows as $hr): ?>
+<tr>
+<td><?=h($hr['nomor'])?></td>
+<td><?=h($hr['tanggal_lapor'])?></td>
+<td><?=nl2br(h($hr['masalah']))?></td>
+<td><?=h(ucfirst($hr['prioritas']))?></td>
+<td><?=h($hr['sla_menit'])?> menit</td>
+<td><?=!empty($hr['tanggal_selesai'])?h($hr['tanggal_selesai']):'Belum selesai'?></td>
+<td><?=$hr['durasi_menit']!==null?h(fmt($hr['durasi_menit'],2).' menit'):'—'?></td>
+<td class="<?=$hr['status_sla']==='sesuai'?'ok':($hr['status_sla']==='tidak_sesuai'?'bad':'empty')?>"><?=h(strtoupper(str_replace('_',' ',$hr['status_sla'])))?></td>
+<td><?=h($hr['pic_nama']??'-')?></td>
+<td><?=h($hr['sumber']??'-')?></td>
+</tr>
+<?php if(!empty($hr['penyelesaian'])||!empty($hr['catatan'])): ?><tr><td colspan="10"><strong>Penyelesaian:</strong> <?=nl2br(h($hr['penyelesaian']??'-'))?><?php if(!empty($hr['catatan'])):?><br><strong>Catatan:</strong> <?=nl2br(h($hr['catatan']))?><?php endif;?></td></tr><?php endif;?>
+<?php endforeach; else: ?><tr><td colspan="10">Belum ada insiden TI pada tahun <?=h($year)?>.</td></tr><?php endif; ?>
+</tbody></table>
+<?php
+$helpdeskEvidence=[];
+if($helpdeskRows){
+    $hrids=array_map(fn($x)=>(int)$x['id'],$helpdeskRows);
+    if($hrids){
+        $ph=implode(',',array_fill(0,count($hrids),'?'));
+        $hev=$pdo->prepare("SELECT b.*,h.nomor,h.tanggal_lapor FROM helpdesk_bukti b JOIN helpdesk_insiden h ON h.id=b.insiden_id WHERE b.insiden_id IN ($ph) ORDER BY h.tanggal_lapor,b.created_at");
+        $hev->execute($hrids);$helpdeskEvidence=$hev->fetchAll();
+    }
+}
+?>
+<h2>6. Bukti Pendukung Insiden TI</h2>
+<div class="small">Bukti diambil langsung dari menu Helpdesk. Screenshot WhatsApp dapat digunakan sebagai bukti pendukung bila memang menjadi sumber pelaporan.</div>
+<table><thead><tr><th>Insiden</th><th>File</th><th>Catatan</th></tr></thead><tbody>
+<?php if($helpdeskEvidence): foreach($helpdeskEvidence as $hb): ?>
+<tr><td><?=h($hb['nomor'])?></td><td><a href="../uploads/helpdesk/<?=rawurlencode(basename($hb['nama_file']))?>" target="_blank"><?=h($hb['original_name'])?></a></td><td><?=h($hb['catatan']??'-')?></td></tr>
+<?php endforeach; else: ?><tr><td colspan="3">Belum ada bukti insiden yang diunggah.</td></tr><?php endif; ?>
+</tbody></table>
+<?php foreach($helpdeskEvidence as $hb):
+ $ext=strtolower(pathinfo($hb['original_name'],PATHINFO_EXTENSION));
+ $isImage=in_array($ext,['jpg','jpeg','png','webp'],true);
+ $url='../uploads/helpdesk/'.rawurlencode(basename($hb['nama_file']));
+?>
+<div class="avoid-break" style="margin-top:10px"><strong><?=h($hb['nomor'])?> — <?=h($hb['original_name'])?></strong>
+<?php if($isImage): ?><div style="margin-top:6px"><img src="<?=h($url)?>" alt="<?=h($hb['original_name'])?>" style="max-width:100%;max-height:260mm;border:1px solid #d7dee5;border-radius:5px"></div><?php else: ?><div class="small" style="margin-top:5px">File bukti: <a href="<?=h($url)?>"><?=h($hb['original_name'])?></a></div><?php endif; ?>
+<?php if(!empty($hb['catatan'])):?><div class="small" style="margin-top:4px"><?=nl2br(h($hb['catatan']))?></div><?php endif; ?></div>
+<?php endforeach; ?>
+<?php endif; ?>
+
 <?php if($i['kode']==='IM-IT-03'): ?>
 <h2>6. Bukti Perwakilan Backup</h2>
 <div class="small">Bukti ini mewakili mekanisme backup offline dan online untuk tahun <?=h($year)?>. Tidak diperlukan screenshot setiap hari. Rekap harian/bulanan tetap menjadi sumber angka capaian.</div>
@@ -269,7 +365,7 @@ $colors=['tercapai'=>'#198754','tidak_tercapai'=>'#dc3545','perlu_perhatian'=>'#
 <?php endforeach; ?>
 <?php endif; ?>
 
-<h2><?=in_array($i['kode'],['IM-IT-01','IM-IT-02'],true)||in_array($i['kode'],['IM-IT-03','IM-IT-04'],true)?'7':'6'?>. Ringkasan</h2>
-<p>Laporan ini mengambil data langsung dari MRMIKIT untuk indikator <strong><?=h($i['kode'])?></strong> tahun <?=h($year)?>. Untuk IM-IT-01 dan IM-IT-02, perhitungan capaian dan rincian kejadian menggunakan tabel <strong>downtime</strong> yang sama. Untuk IM-IT-04, capaian dan bukti uji restore ditelusuri dari catatan uji restore yang tersimpan di MRMIKIT.</p>
+<h2><?=in_array($i['kode'],['IM-IT-01','IM-IT-02'],true)||in_array($i['kode'],['IM-IT-03','IM-IT-04'],true)||$i['kode']==='IM-IT-05'?'7':'6'?>. Ringkasan</h2>
+<p>Laporan ini mengambil data langsung dari MRMIKIT untuk indikator <strong><?=h($i['kode'])?></strong> tahun <?=h($year)?>. Untuk IM-IT-01 dan IM-IT-02, perhitungan capaian dan rincian kejadian menggunakan tabel <strong>downtime</strong> yang sama. Untuk IM-IT-04, capaian dan bukti uji restore ditelusuri dari catatan uji restore yang tersimpan di MRMIKIT. Untuk IM-IT-05, capaian dan rincian insiden diambil dari menu <strong>Helpdesk IT &amp; SLA</strong> beserta bukti pendukungnya.</p>
 <div class="footer">Dicetak dari MRMIKIT · <?=date('d-m-Y H:i')?> · Laporan Indikator Mutu IT</div>
 </body></html>
