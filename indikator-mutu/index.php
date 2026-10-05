@@ -1066,8 +1066,9 @@ foreach($indikators as &$ii){
         $latest=null;
         $st05hm=$pdo->prepare("SELECT
             COUNT(*) total,
-            SUM(CASE WHEN status='selesai' AND status_sla='sesuai' THEN 1 ELSE 0 END) sesuai,
-            SUM(CASE WHEN status='selesai' AND status_sla='tidak_sesuai' THEN 1 ELSE 0 END) tidak_sesuai
+            SUM(CASE WHEN durasi_menit IS NOT NULL AND durasi_menit >= 0 AND durasi_menit <= sla_menit THEN 1 ELSE 0 END) sesuai,
+            SUM(CASE WHEN durasi_menit IS NOT NULL AND durasi_menit >= 0 AND durasi_menit > sla_menit THEN 1 ELSE 0 END) tidak_sesuai,
+            SUM(CASE WHEN durasi_menit IS NULL THEN 1 ELSE 0 END) belum_dinilai
             FROM helpdesk_insiden
             WHERE YEAR(tanggal_lapor)=? AND MONTH(tanggal_lapor)=?");
         $target=$ii['target']!==null?(float)$ii['target']:null;
@@ -1083,10 +1084,16 @@ foreach($indikators as &$ii){
             if($total<=0) continue;
 
             $sesuai=(int)($h['sesuai']??0);
-            $value=round(($sesuai/$total)*100,4);
-            $status=$target===null
-                ? 'belum_dinilai'
-                : ($value >= $target ? 'tercapai' : 'tidak_tercapai');
+            $belum=(int)($h['belum_dinilai']??0);
+            if($belum>0){
+                $value=null;
+                $status='belum_dinilai';
+            }else{
+                $value=round(($sesuai/$total)*100,4);
+                $status=$target===null
+                    ? 'belum_dinilai'
+                    : ($value >= $target ? 'tercapai' : 'tidak_tercapai');
+            }
 
             $m[$hm]=['capaian'=>$value,'status'=>$status];
 
