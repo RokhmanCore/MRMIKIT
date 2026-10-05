@@ -87,14 +87,18 @@ if($i['kode']==='IM-IT-03'){
     $backupEvidence=$est->fetchAll();
 }
 
-/* Bukti pendukung downtime: seluruh bukti yang diunggah pada capaian tahun laporan.
- * Untuk IM-IT-01/02, satu bukti dapat ditampilkan kembali pada laporan.
+/* Bukti pendukung downtime diambil LANGSUNG dari tabel downtime.
+ * File yang diunggah pada menu Downtime tersimpan pada:
+ * uploads/downtime/ dan direferensikan oleh downtime.bukti_filename.
+ * Tidak menggunakan mutu_bukti karena itu adalah bukti capaian indikator.
  */
 $downtimeEvidence=[];
-if(in_array($i['kode'],['IM-IT-01','IM-IT-02'],true) && $ids){
-    $st=$pdo->prepare("SELECT b.*,c.periode FROM mutu_bukti b JOIN mutu_capaian c ON c.id=b.capaian_id WHERE b.capaian_id IN ($ph) ORDER BY c.periode,b.created_at");
-    $st->execute($ids);
-    $downtimeEvidence=$st->fetchAll();
+if(in_array($i['kode'],['IM-IT-01','IM-IT-02'],true)){
+    foreach($downtimeRows as $ev){
+        if(!empty($ev['bukti_filename'])){
+            $downtimeEvidence[]=$ev;
+        }
+    }
 }
 
 /* Data uji restore IM-IT-04 dan bukti-buktinya. */
@@ -204,16 +208,31 @@ $colors=['tercapai'=>'#198754','tidak_tercapai'=>'#dc3545','perlu_perhatian'=>'#
 
 <?php if(in_array($i['kode'],['IM-IT-01','IM-IT-02'],true)): ?>
 <h2>7. Bukti Pendukung Downtime</h2>
-<div class="small">Bukti downtime yang diunggah pada capaian indikator ditampilkan di sini agar menjadi bagian dari laporan akreditasi. Tidak perlu upload ulang pada halaman laporan.</div>
-<table><thead><tr><th>Bulan</th><th>Nama file</th><th>Catatan</th></tr></thead><tbody>
+<div class="small">Bukti diambil langsung dari <strong>menu Downtime</strong> (tabel <strong>downtime</strong>). Tidak perlu upload ulang pada menu laporan.</div>
+<table><thead><tr><th>Tanggal</th><th>Nama file</th><th>Sumber data</th><th>Penyebab</th><th>Catatan</th></tr></thead><tbody>
 <?php if($downtimeEvidence): foreach($downtimeEvidence as $db): ?>
-<tr><td><?=h($monthNames[(int)date('n',strtotime($db['periode']))-1])?></td><td><?=h($db['original_name'])?></td><td><?=h($db['catatan']??'-')?></td></tr>
-<?php endforeach; else: ?><tr><td colspan="3">Belum ada bukti downtime yang diunggah.</td></tr><?php endif; ?>
+<tr>
+<td><?=h(date('d-m-Y',strtotime($db['mulai'])))?></td>
+<td><a href="../uploads/downtime/<?=rawurlencode(basename($db['bukti_filename']))?>" target="_blank"><?=h($db['bukti_original_name']??basename($db['bukti_filename']))?></a></td>
+<td><?=h($db['sumber_data']??'-')?></td>
+<td><?=h($db['penyebab']??'-')?></td>
+<td><?=h($db['evaluasi']??$db['tindakan']??'-')?></td>
+</tr>
+<?php endforeach; else: ?><tr><td colspan="5">Belum ada bukti downtime yang diunggah pada menu Downtime untuk tahun <?=h($year)?>.</td></tr><?php endif; ?>
 </tbody></table>
-<?php foreach($downtimeEvidence as $db): $isImage=in_array(strtolower(pathinfo($db['original_name'],PATHINFO_EXTENSION)),['jpg','jpeg','png'],true); ?>
-<div class="avoid-break" style="margin-top:10px"><strong><?=h($monthNames[(int)date('n',strtotime($db['periode']))-1])?> — <?=h($db['original_name'])?></strong>
-<?php if($isImage): ?><div style="margin-top:6px"><img src="download.php?id=<?=$db['id']?>" alt="<?=h($db['original_name'])?>" style="max-width:100%;max-height:260mm;border:1px solid #d7dee5;border-radius:5px"></div><?php else: ?><div class="small" style="margin-top:5px">File tersimpan sebagai bukti: <?=h($db['original_name'])?></div><?php endif; ?>
-<?php if(!empty($db['catatan'])):?><div class="small" style="margin-top:4px"><?=nl2br(h($db['catatan']))?></div><?php endif; ?></div>
+<?php foreach($downtimeEvidence as $db):
+    $ext=strtolower(pathinfo($db['bukti_filename'],PATHINFO_EXTENSION));
+    $isImage=in_array($ext,['jpg','jpeg','png','webp'],true);
+    $fileUrl='../uploads/downtime/'.rawurlencode(basename($db['bukti_filename']));
+?>
+<div class="avoid-break" style="margin-top:10px">
+<strong><?=h(date('d-m-Y H:i',strtotime($db['mulai'])))?> — <?=h($db['bukti_original_name']??basename($db['bukti_filename']))?></strong>
+<?php if($isImage): ?>
+<div style="margin-top:6px"><img src="<?=h($fileUrl)?>" alt="<?=h($db['bukti_original_name']??'Bukti downtime')?>" style="max-width:100%;max-height:260mm;border:1px solid #d7dee5;border-radius:5px"></div>
+<?php else: ?>
+<div class="small" style="margin-top:5px">File bukti: <a href="<?=h($fileUrl)?>"><?=h($db['bukti_original_name']??basename($db['bukti_filename']))?></a></div>
+<?php endif; ?>
+</div>
 <?php endforeach; ?>
 <?php endif; ?>
 
