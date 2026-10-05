@@ -1043,6 +1043,55 @@ foreach($indikators as &$ii){
 
     
     /*
+     * IM-IT-05: heatmap harus membaca langsung data Helpdesk/SLA.
+     * Jangan memakai nilai capaian lama yang mungkin tersimpan sebagai 0
+     * ketika belum ada data atau status SLA belum dihitung.
+     */
+    if(($ii['kode']??'')==='IM-IT-05'){
+        $m=[];
+        $latest=null;
+        $st05hm=$pdo->prepare("SELECT
+            COUNT(*) total,
+            SUM(CASE WHEN status='selesai' AND status_sla='sesuai' THEN 1 ELSE 0 END) sesuai,
+            SUM(CASE WHEN status='selesai' AND status_sla='tidak_sesuai' THEN 1 ELSE 0 END) tidak_sesuai
+            FROM helpdesk_insiden
+            WHERE YEAR(tanggal_lapor)=? AND MONTH(tanggal_lapor)=?");
+        $target=$ii['target']!==null?(float)$ii['target']:null;
+        $currentYear=(int)date('Y');
+        $currentMonth=(int)date('n');
+
+        for($hm=1;$hm<=12;$hm++){
+            $st05hm->execute([$year,$hm]);
+            $h=$st05hm->fetch();
+            $total=(int)($h['total']??0);
+
+            // Tidak ada insiden: kosong/abu-abu, bukan 0%.
+            if($total<=0) continue;
+
+            $sesuai=(int)($h['sesuai']??0);
+            $value=round(($sesuai/$total)*100,4);
+            $status=$target===null
+                ? 'belum_dinilai'
+                : ($value >= $target ? 'tercapai' : 'tidak_tercapai');
+
+            $m[$hm]=['capaian'=>$value,'status'=>$status];
+
+            if($year < $currentYear || ($year===$currentYear && $hm < $currentMonth)){
+                $latest=['capaian'=>$value,'status'=>$status,'bulan'=>$hm];
+            }
+        }
+
+        if($latest){
+            $ii['capaian_terakhir']=$latest['capaian'];
+            $ii['status_terakhir']=$latest['status'];
+            $ii['jumlah_periode']=$latest['bulan'];
+        }else{
+            $ii['capaian_terakhir']=null;
+            $ii['status_terakhir']='belum_dinilai';
+        }
+    }
+
+    /*
      * IM-IT-04: heatmap membaca langsung hasil uji restore.
      * 1 uji berhasil = 100%, uji gagal = 0%.
      * Jika tidak ada uji pada suatu bulan, bulan tetap kosong/abu-abu.
