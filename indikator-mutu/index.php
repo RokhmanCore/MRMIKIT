@@ -1071,7 +1071,10 @@ foreach($indikators as &$ii){
             SUM(CASE WHEN durasi_menit IS NULL THEN 1 ELSE 0 END) belum_dinilai
             FROM helpdesk_insiden
             WHERE YEAR(tanggal_lapor)=? AND MONTH(tanggal_lapor)=?");
-        $target=$ii['target']!==null?(float)$ii['target']:null;
+        // IM-IT-05: target default 100% bila target indikator belum diisi.
+        // Seluruh insiden harus selesai sesuai SLA.
+        $target=($ii['target']!==null && $ii['target']!=='')
+            ? (float)$ii['target'] : 100.0;
         $currentYear=(int)date('Y');
         $currentMonth=(int)date('n');
 
@@ -1090,9 +1093,7 @@ foreach($indikators as &$ii){
                 $status='belum_dinilai';
             }else{
                 $value=round(($sesuai/$total)*100,4);
-                $status=$target===null
-                    ? 'belum_dinilai'
-                    : ($value >= $target ? 'tercapai' : 'tidak_tercapai');
+                $status=($value >= $target) ? 'tercapai' : 'tidak_tercapai';
             }
 
             $m[$hm]=['capaian'=>$value,'status'=>$status];
