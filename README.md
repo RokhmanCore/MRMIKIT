@@ -67,3 +67,24 @@ Rumus:
 **Ketersediaan SIMRS = (waktu yang seharusnya tersedia − downtime) ÷ waktu yang seharusnya tersedia × 100%**
 
 Catatan: fitur ini menggunakan catatan pada tabel `downtime`. Karena itu, hanya masukkan kejadian yang memang memengaruhi ketersediaan SIMRS agar hasil indikator dapat ditelusuri.
+
+
+### Helpdesk IT & IM-IT-05 SLA
+
+Modul **Helpdesk IT & SLA** tersedia di `/helpdesk/` dan terhubung otomatis ke indikator **IM-IT-05 Penyelesaian insiden IT sesuai SLA**.
+
+Fitur:
+- pencatatan nomor insiden, waktu laporan dan waktu selesai;
+- prioritas dan SLA dalam menit;
+- perhitungan durasi otomatis;
+- status Sesuai SLA / Tidak Sesuai SLA;
+- sumber laporan termasuk WhatsApp;
+- upload banyak bukti (screenshot WhatsApp, screenshot error, log, foto, PDF/Office);
+- edit dan hapus insiden;
+- rekap bulanan otomatis ke IM-IT-05;
+- laporan indikator mengambil rincian insiden dan bukti tanpa input ulang.
+
+Rumus IM-IT-05:
+`jumlah insiden selesai sesuai SLA / jumlah seluruh insiden pada bulan × 100%`.
+
+**Catatan:** bulan tanpa insiden tidak otomatis dianggap 100%; tetap tidak dinilai agar tidak membuat data capaian tanpa bukti.
