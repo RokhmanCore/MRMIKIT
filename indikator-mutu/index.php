@@ -798,6 +798,65 @@ if($year<2020 || $year>2100) $year=(int)date('Y');
  * baris kosong/0 untuk bulan tersebut dapat membuat indikator terlihat
  * "TIDAK TERCAPAI" walaupun Januari-September sudah terisi.
  */
+
+/* IM-IT-05 Helpdesk/SLA: sumber otomatis dari tabel helpdesk_insiden. */
+$pdo->exec("CREATE TABLE IF NOT EXISTS helpdesk_insiden (
+ id INT AUTO_INCREMENT PRIMARY KEY,
+ nomor VARCHAR(50) NOT NULL UNIQUE,
+ tanggal_lapor DATETIME NOT NULL,
+ tanggal_selesai DATETIME NULL,
+ unit_pelapor VARCHAR(150) NULL,
+ pelapor VARCHAR(150) NULL,
+ masalah TEXT NOT NULL,
+ prioritas ENUM('kritikal','tinggi','sedang','rendah') NOT NULL DEFAULT 'sedang',
+ sla_menit INT NOT NULL DEFAULT 240,
+ durasi_menit DECIMAL(12,2) NULL,
+ status ENUM('open','selesai','batal') NOT NULL DEFAULT 'open',
+ status_sla ENUM('sesuai','tidak_sesuai','belum_dinilai') NOT NULL DEFAULT 'belum_dinilai',
+ penyelesaian TEXT NULL,
+ pic_id INT NULL,
+ sumber VARCHAR(50) NOT NULL DEFAULT 'whatsapp',
+ catatan TEXT NULL,
+ created_by INT NULL,
+ created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ INDEX idx_helpdesk_tanggal(tanggal_lapor)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+$im05Id=(int)($pdo->query("SELECT id FROM mutu_indikator WHERE kode='IM-IT-05' AND aktif=1 LIMIT 1")->fetchColumn()?:0);
+if($im05Id>0){
+    $target05=$pdo->query("SELECT target FROM mutu_indikator WHERE id=".$im05Id)->fetchColumn();
+    $target05=$target05!==false && $target05!==null ? (float)$target05 : null;
+    $currentYear=(int)date('Y'); $currentMonth=(int)date('n');
+    $up05=$pdo->prepare("INSERT INTO mutu_capaian
+        (indikator_id,periode,numerator,denominator,capaian,target_snapshot,analisis,tindak_lanjut,status,created_by)
+        VALUES(?,?,?,?,?,?,?,?,?,?)
+        ON DUPLICATE KEY UPDATE numerator=VALUES(numerator),denominator=VALUES(denominator),
+        capaian=VALUES(capaian),target_snapshot=VALUES(target_snapshot),
+        analisis=VALUES(analisis),status=VALUES(status),updated_at=CURRENT_TIMESTAMP");
+    for($hm=1;$hm<=12;$hm++){
+        $past=(($year<$currentYear)||($year===$currentYear&&$hm<$currentMonth));
+        if(!$past) continue;
+        $st05=$pdo->prepare("SELECT
+            COUNT(*) total,
+            SUM(CASE WHEN status='selesai' AND status_sla='sesuai' THEN 1 ELSE 0 END) sesuai,
+            SUM(CASE WHEN status='selesai' AND status_sla='tidak_sesuai' THEN 1 ELSE 0 END) tidak_sesuai
+            FROM helpdesk_insiden
+            WHERE YEAR(tanggal_lapor)=? AND MONTH(tanggal_lapor)=?");
+        $st05->execute([$year,$hm]); $h05=$st05->fetch();
+        $total05=(int)($h05['total']??0);
+        if($total05<=0) continue; // Tidak ada insiden = belum ada data, bukan 100%.
+        $sesuai05=(int)($h05['sesuai']??0);
+        $cap05=round(($sesuai05/$total05)*100,4);
+        $status05=$target05===null?'belum_dinilai':($cap05>=$target05?'tercapai':'tidak_tercapai');
+        $periode05=sprintf('%04d-%02d-01',$year,$hm);
+        $up05->execute([$im05Id,$periode05,$sesuai05,$total05,$cap05,$target05,
+            "Otomatis dari Helpdesk IT: {$sesuai05} dari {$total05} insiden selesai sesuai SLA.",
+            "Tinjau insiden yang melewati SLA dan lakukan RTL sesuai kebutuhan.",
+            $status05,$_SESSION['user']['id']??null]);
+    }
+}
+
 $indikators=$pdo->query("
  SELECT i.*,p.nama pic_nama,
    (SELECT COUNT(*) FROM mutu_capaian c WHERE c.indikator_id=i.id AND YEAR(c.periode)={$year}) jumlah_periode,
@@ -1070,6 +1129,12 @@ if($detailId){
        $backupEvidence=$est->fetchAll();
    }
 
+   $helpdeskRows=[];
+   if($detail['kode']==='IM-IT-05'){
+       $hst=$pdo->prepare("SELECT h.*,p.nama pic_nama FROM helpdesk_insiden h LEFT JOIN pic p ON p.id=h.pic_id WHERE YEAR(h.tanggal_lapor)=? ORDER BY h.tanggal_lapor DESC,h.id DESC");
+       $hst->execute([$year]); $helpdeskRows=$hst->fetchAll();
+   }
+
    if(in_array($detail['kode'],['IM-IT-01','IM-IT-02'],true)){
        for($dm=1;$dm<=12;$dm++){
            $auto=$downtimeAuto[$dm]??null;
@@ -1302,6 +1367,31 @@ require __DIR__.'/../partials/header.php';
   </div>
  </div>
  <div class="alert alert-warning mt-3 mb-0 small"><strong>Sumber data:</strong> IM-IT-01 dan IM-IT-02 sama-sama mengambil kejadian dari tabel <strong>downtime</strong>. September, misalnya, jika tidak ada kejadian downtime dan bulannya sudah selesai, otomatis menjadi <strong>0 menit downtime</strong> pada IM-IT-02 dan <strong>100% ketersediaan</strong> pada IM-IT-01.</div>
+</div></div>
+<?php endif; ?>
+
+<?php if(($detail['kode']??'')==='IM-IT-05'): ?>
+<div class="card border-success shadow-sm mb-4"><div class="card-body">
+ <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div><h5 class="mb-1">🛠️ Helpdesk IT & SLA</h5><div class="small text-muted">IM-IT-05 membaca data insiden dari menu Helpdesk. Capaian bulanan = insiden selesai sesuai SLA ÷ seluruh insiden selesai × 100%.</div></div>
+  <div class="d-flex gap-2"><a class="btn btn-outline-success" href="../helpdesk/tambah.php">+ Tambah Insiden</a><a class="btn btn-outline-primary" href="../helpdesk/?tahun=<?=$year?>">📋 Semua Insiden</a></div>
+ </div>
+ <div class="alert alert-info small mt-3 mb-3"><strong>WhatsApp tetap boleh menjadi sumber bukti.</strong> Lampirkan screenshot yang menunjukkan waktu laporan dan penyelesaian. Jangan membuat waktu atau capaian tanpa bukti.</div>
+ <div class="table-responsive"><table class="table table-bordered table-sm align-middle">
+ <thead><tr><th>Bulan</th><th>Total insiden</th><th>Sesuai SLA</th><th>Tidak sesuai</th><th>Capaian</th><th>Status</th></tr></thead><tbody>
+ <?php for($hm=1;$hm<=12;$hm++):
+   $hRows=array_filter($helpdeskRows,fn($x)=>(int)date('n',strtotime($x['tanggal_lapor']))===$hm);
+   $total=count($hRows);$sesuai=count(array_filter($hRows,fn($x)=>$x['status']==='selesai'&&$x['status_sla']==='sesuai'));$tidak=count(array_filter($hRows,fn($x)=>$x['status']==='selesai'&&$x['status_sla']==='tidak_sesuai'));$cap=$total>0?round($sesuai/$total*100,2):null;
+   $target=$detail['target']!==null?(float)$detail['target']:null;$hs=$cap===null?'belum_dinilai':($target===null?'belum_dinilai':($cap>=$target?'tercapai':'tidak_tercapai'));
+ ?>
+ <tr><td><strong><?=h($monthNames[$hm-1])?></strong></td><td><?=$total?></td><td class="text-success fw-bold"><?=$sesuai?></td><td class="text-danger fw-bold"><?=$tidak?></td><td><?=$cap!==null?h($cap.' %'):'—'?></td><td><span class="status-pill <?=($hs==='tercapai'?'status-tercapai':($hs==='tidak_tercapai'?'status-tidak':'status-belum'))?>"><?=h(strtoupper(str_replace('_',' ',$hs)))?></span></td></tr>
+ <?php endfor; ?>
+ </tbody></table></div>
+ <div class="table-responsive mt-3"><table class="table table-sm align-middle"><thead><tr><th>Nomor</th><th>Lapor</th><th>Masalah</th><th>SLA</th><th>Selesai</th><th>Durasi</th><th>Status SLA</th><th>Bukti</th></tr></thead><tbody>
+ <?php foreach($helpdeskRows as $hr): ?>
+ <tr><td><?=h($hr['nomor'])?></td><td><?=h(date('d-m-Y H:i',strtotime($hr['tanggal_lapor'])))?></td><td><?=h($hr['masalah'])?></td><td><?=h($hr['sla_menit'])?> mnt</td><td><?=!empty($hr['tanggal_selesai'])?h(date('d-m-Y H:i',strtotime($hr['tanggal_selesai']))):'—'?></td><td><?=$hr['durasi_menit']!==null?h(round((float)$hr['durasi_menit'],2).' mnt'):'—'?></td><td><span class="status-pill <?=$hr['status_sla']==='sesuai'?'status-tercapai':($hr['status_sla']==='tidak_sesuai'?'status-tidak':'status-belum')?>"><?=h(strtoupper(str_replace('_',' ',$hr['status_sla'])))?></span></td><td><?=h($hr['sumber']??'-')?></td></tr>
+ <?php endforeach;if(!$helpdeskRows):?><tr><td colspan="8" class="text-muted">Belum ada insiden tahun <?=h($year)?>.</td></tr><?php endif;?>
+ </tbody></table></div>
 </div></div>
 <?php endif; ?>
 
