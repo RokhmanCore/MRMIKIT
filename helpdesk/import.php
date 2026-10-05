@@ -196,7 +196,7 @@ function mapRows($tables){
                 'pic_text'=>$v($pic),
                 'bukti'=>$v($evidence),
                 'sumber'=>'laporan',
-                'source_waktu'=>$v($sourceWaktu)?:'tercatat'
+                'source_waktu'=>$v($sourceWaktu)?:($tanggalMulai&&$tanggalSelesai?'tercatat':'tidak_tersedia')
             ];
         }
         return $out;
@@ -242,8 +242,8 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
                 if($sourceWaktu===''||!in_array($sourceWaktu,['tercatat','konfirmasi_petugas','perkiraan','tidak_tersedia'],true)){
                     $sourceWaktu=$r['source_waktu']??'tidak_tersedia';
                 }
-                if($dur===null && $sel){
-                    $a=new DateTime($start?:$r['tanggal_lapor']);$b=new DateTime($sel);
+                if($start && $sel){
+                    $a=new DateTime($start);$b=new DateTime($sel);
                     $dur=round(($b->getTimestamp()-$a->getTimestamp())/60,2);
                 }
                 if($ss===null){
