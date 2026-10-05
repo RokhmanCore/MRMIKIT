@@ -22,11 +22,13 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS helpdesk_insiden (
  pic_id INT NULL,
  sumber VARCHAR(50) NOT NULL DEFAULT 'laporan',
  catatan TEXT NULL,
+ source_waktu ENUM('tercatat','konfirmasi_petugas','perkiraan','tidak_tersedia') NOT NULL DEFAULT 'tidak_tersedia',
  created_by INT NULL,
  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
  INDEX idx_helpdesk_tanggal(tanggal_lapor)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+try{$pdo->exec("ALTER TABLE helpdesk_insiden ADD COLUMN source_waktu ENUM('tercatat','konfirmasi_petugas','perkiraan','tidak_tersedia') NOT NULL DEFAULT 'tidak_tersedia' AFTER catatan");}catch(Throwable $e){}
 
 function norm($s){
     $s=trim(mb_strtolower((string)$s,'UTF-8'));
@@ -154,6 +156,7 @@ function mapRows($tables){
         $priority=pickCol($headers,['prioritas','priority']);
         $pic=pickCol($headers,['pic','petugas','teknisi']);
         $evidence=pickCol($headers,['bukti','evidence','keterangan','catatan']);
+        $sourceWaktu=pickCol($headers,['sumber waktu','sumber jam','asal waktu']);
         if($date===null && $dateTime===null)continue;
         if($issue===null)continue;
 
@@ -192,7 +195,8 @@ function mapRows($tables){
                 'penyelesaian'=>$v($action),
                 'pic_text'=>$v($pic),
                 'bukti'=>$v($evidence),
-                'sumber'=>'laporan'
+                'sumber'=>'laporan',
+                'source_waktu'=>$v($sourceWaktu)?:'tercatat'
             ];
         }
         return $out;
@@ -218,21 +222,28 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
             if(!$preview)throw new RuntimeException('Data import sudah kosong. Upload ulang.');
             $defaultSla=max(1,(int)($_POST['default_sla']??240));
             $selected=$_POST['selected']??[];
-            $ins=$pdo->prepare("INSERT INTO helpdesk_insiden(nomor,tanggal_lapor,tanggal_selesai,unit_pelapor,pelapor,masalah,prioritas,sla_menit,durasi_menit,status,status_sla,penyelesaian,pic_id,sumber,catatan,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+            $ins=$pdo->prepare("INSERT INTO helpdesk_insiden(nomor,tanggal_lapor,tanggal_selesai,unit_pelapor,pelapor,masalah,prioritas,sla_menit,durasi_menit,status,status_sla,penyelesaian,pic_id,sumber,catatan,source_waktu,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
 
             $picRows=[];
             try{$picRows=$pdo->query("SELECT id,nama FROM pic WHERE aktif=1 ORDER BY nama")->fetchAll(PDO::FETCH_ASSOC);}catch(Throwable $e){}
             foreach($selected as $idx){
                 $idx=(int)$idx;if(!isset($preview[$idx]))continue;$r=$preview[$idx];
 
-                $sel=$r['tanggal_selesai'];
+                $manualStart=trim((string)($_POST['jam_mulai'][$idx]??''));
+                $manualFinish=trim((string)($_POST['jam_selesai'][$idx]??''));
+                $sourceWaktu=trim((string)($_POST['source_waktu'][$idx]??''));
+                $start=$manualStart!==''?parseDateTimeValue(str_replace('T',' ',$manualStart).':00'):$r['tanggal_mulai'];
+                $sel=$manualFinish!==''?parseDateTimeValue(str_replace('T',' ',$manualFinish).':00'):$r['tanggal_selesai'];
                 $dur=$r['durasi_menit'];
                 $sla=$r['sla_menit']?:$defaultSla;
                 $ss=$r['status_sla'];
                 $status=$sel?'selesai':'open';
 
+                if($sourceWaktu===''||!in_array($sourceWaktu,['tercatat','konfirmasi_petugas','perkiraan','tidak_tersedia'],true)){
+                    $sourceWaktu=$r['source_waktu']??'tidak_tersedia';
+                }
                 if($dur===null && $sel){
-                    $a=new DateTime($r['tanggal_lapor']);$b=new DateTime($sel);
+                    $a=new DateTime($start?:$r['tanggal_lapor']);$b=new DateTime($sel);
                     $dur=round(($b->getTimestamp()-$a->getTimestamp())/60,2);
                 }
                 if($ss===null){
@@ -249,7 +260,11 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
                 }
 
                 $catatan=[];
-                if($r['tanggal_mulai'])$catatan[]='Jam mulai: '.$r['tanggal_mulai'];
+                if($start)$catatan[]='Jam mulai: '.$start;
+                if($sourceWaktu==='konfirmasi_petugas')$catatan[]='Sumber waktu: Konfirmasi petugas';
+                elseif($sourceWaktu==='perkiraan')$catatan[]='Sumber waktu: Perkiraan/rekonstruksi';
+                elseif($sourceWaktu==='tercatat')$catatan[]='Sumber waktu: Tercatat di laporan';
+                else $catatan[]='Sumber waktu: Tidak tersedia';
                 if($r['barang'])$catatan[]='Perangkat: '.$r['barang'];
                 if($r['bukti'])$catatan[]='Bukti/Keterangan: '.$r['bukti'];
                 if($picText && !$picId)$catatan[]='PIC dari Word: '.$picText;
@@ -260,7 +275,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
                 $ins->execute([
                     $nomor,$r['tanggal_lapor'],$sel,$r['unit_pelapor'],$r['pelapor'],$r['masalah'],
                     $r['prioritas'],$sla,$dur,$status,$ss,$r['penyelesaian'],$picId,
-                    'laporan',$catatanText,$_SESSION['user']['id']??null
+                    'laporan',$catatanText,$sourceWaktu,$_SESSION['user']['id']??null
                 ]);
                 $saved++;
             }
@@ -294,17 +309,27 @@ $page_title='Import Laporan Maintenance';require __DIR__.'/../partials/header.ph
 </div>
 <div class="table-responsive"><table class="table table-sm table-bordered align-middle"><thead><tr>
 <th><input type="checkbox" checked onclick="document.querySelectorAll('.pick').forEach(x=>x.checked=this.checked)"></th>
-<th>Tanggal/Jam Lapor</th><th>Jam Mulai</th><th>Jam Selesai</th><th>Unit</th><th>Masalah</th><th>Durasi</th><th>SLA</th><th>PIC</th><th>Status SLA</th><th>Tindakan</th>
+<th>Tanggal/Jam Lapor</th><th>Jam Mulai</th><th>Jam Selesai</th><th>Unit</th><th>Masalah</th><th>Durasi</th><th>SLA</th><th>PIC</th><th>Status SLA</th><th>Sumber Waktu</th><th>Tindakan</th>
 </tr></thead><tbody>
 <?php foreach($preview as $n=>$r):?>
 <tr>
 <td><input class="pick" type="checkbox" name="selected[]" value="<?=$n?>" checked></td>
-<td><?=h($r['tanggal_lapor'])?></td><td><?=h($r['tanggal_mulai'])?></td><td><?=h($r['tanggal_selesai'])?></td>
+<td><?=h($r['tanggal_lapor'])?></td>
+<td><input class="form-control form-control-sm" type="datetime-local" name="jam_mulai[<?=$n?>]" value="<?=h($r['tanggal_mulai']?date('Y-m-d\\TH:i',strtotime($r['tanggal_mulai'])):'')?>"></td>
+<td><input class="form-control form-control-sm" type="datetime-local" name="jam_selesai[<?=$n?>]" value="<?=h($r['tanggal_selesai']?date('Y-m-d\\TH:i',strtotime($r['tanggal_selesai'])):'')?>"></td>
 <td><?=h($r['unit_pelapor'])?></td><td><?=h($r['masalah'])?></td>
 <td><?=h($r['durasi_menit']!==null?$r['durasi_menit'].' menit':'')?></td>
 <td><?=h($r['sla_menit']!==null?$r['sla_menit'].' menit':'default')?></td>
 <td><?=h($r['pic_text'])?></td>
 <td><?=h($r['status_sla']??'BELUM DINILAI')?></td>
+<td>
+<select class="form-select form-select-sm" name="source_waktu[<?=$n?>]">
+<option value="tercatat" <?=($r['source_waktu']??'')==='tercatat'?'selected':''?>>Tercatat di laporan</option>
+<option value="konfirmasi_petugas" <?=($r['source_waktu']??'')==='konfirmasi_petugas'?'selected':''?>>Konfirmasi petugas</option>
+<option value="perkiraan" <?=($r['source_waktu']??'')==='perkiraan'?'selected':''?>>Perkiraan / rekonstruksi</option>
+<option value="tidak_tersedia" <?=($r['source_waktu']??'')==='tidak_tersedia'?'selected':''?>>Tidak tersedia</option>
+</select>
+</td>
 <td><?=h($r['penyelesaian'])?></td>
 </tr>
 <?php endforeach;?>
