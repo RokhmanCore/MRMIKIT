@@ -87,7 +87,6 @@ if($i['kode']==='IM-IT-03'){
     $backupEvidence=$est->fetchAll();
 }
 
-<?php
 /* Bukti pendukung downtime: seluruh bukti yang diunggah pada capaian tahun laporan.
  * Untuk IM-IT-01/02, satu bukti dapat ditampilkan kembali pada laporan.
  */
@@ -97,7 +96,7 @@ if(in_array($i['kode'],['IM-IT-01','IM-IT-02'],true) && $ids){
     $st->execute($ids);
     $downtimeEvidence=$st->fetchAll();
 }
-?>
+
 /* Data uji restore IM-IT-04 dan bukti-buktinya. */
 $restoreRows=[];
 $restoreEvidence=[];
