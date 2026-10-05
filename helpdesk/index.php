@@ -50,7 +50,7 @@ require __DIR__.'/../partials/header.php';
 ?>
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
  <div><h2 class="mb-1">Helpdesk IT & SLA</h2><div class="text-muted">Pencatatan insiden TI, batas SLA, penyelesaian, dan bukti pendukung untuk IM-IT-05.</div></div>
- <div class="d-flex gap-2"><a class="btn btn-success" href="tambah.php">+ Tambah Insiden</a><a class="btn btn-outline-primary" href="../indikator-mutu/?detail=<?=((int)($pdo->query("SELECT id FROM mutu_indikator WHERE kode='IM-IT-05' LIMIT 1")->fetchColumn()))?>&tahun=<?=$year?>">IM-IT-05</a></div>
+ <div class="d-flex gap-2"><a class="btn btn-success" href="tambah.php">+ Tambah Insiden</a><a class="btn btn-primary" href="import.php">📥 Import Word Maintenance</a><a class="btn btn-outline-primary" href="../indikator-mutu/?detail=<?=((int)($pdo->query("SELECT id FROM mutu_indikator WHERE kode='IM-IT-05' LIMIT 1")->fetchColumn()))?>&tahun=<?=$year?>">IM-IT-05</a></div>
 </div>
 <div class="alert alert-info"><strong>Catatan:</strong> WhatsApp boleh menjadi sumber bukti. Simpan screenshot percakapan yang menunjukkan waktu laporan dan penyelesaian, lalu lampirkan pada insiden ini. Jangan membuat waktu yang tidak ada di bukti.</div>
 <form class="row g-2 mb-3"><div class="col-auto"><select name="tahun" class="form-select" onchange="this.form.submit()"><?php for($y=date('Y')-2;$y<=date('Y')+1;$y++):?><option <?=$y===$year?'selected':''?>><?=$y?></option><?php endfor;?></select></div></form>
