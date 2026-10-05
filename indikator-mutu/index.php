@@ -856,23 +856,37 @@ if($im05Id>0){
         capaian=VALUES(capaian),target_snapshot=VALUES(target_snapshot),
         analisis=VALUES(analisis),status=VALUES(status),updated_at=CURRENT_TIMESTAMP");
     for($hm=1;$hm<=12;$hm++){
-        $past=(($year<$currentYear)||($year===$currentYear&&$hm<$currentMonth));
-        if(!$past) continue;
         $st05=$pdo->prepare("SELECT
             COUNT(*) total,
             SUM(CASE WHEN status='selesai' AND status_sla='sesuai' THEN 1 ELSE 0 END) sesuai,
-            SUM(CASE WHEN status='selesai' AND status_sla='tidak_sesuai' THEN 1 ELSE 0 END) tidak_sesuai
+            SUM(CASE WHEN status='selesai' AND status_sla='tidak_sesuai' THEN 1 ELSE 0 END) tidak_sesuai,
+            SUM(CASE WHEN status_sla='belum_dinilai' THEN 1 ELSE 0 END) belum_dinilai
             FROM helpdesk_insiden
             WHERE YEAR(tanggal_lapor)=? AND MONTH(tanggal_lapor)=?");
         $st05->execute([$year,$hm]); $h05=$st05->fetch();
         $total05=(int)($h05['total']??0);
-        if($total05<=0) continue; // Tidak ada insiden = belum ada data, bukan 100%.
+        if($total05<=0) continue;
+
         $sesuai05=(int)($h05['sesuai']??0);
-        $cap05=round(($sesuai05/$total05)*100,4);
-        $status05=$target05===null?'belum_dinilai':($cap05>=$target05?'tercapai':'tidak_tercapai');
+        $tidak05=(int)($h05['tidak_sesuai']??0);
+        $belum05=(int)($h05['belum_dinilai']??0);
+
+        // Capaian hanya dapat dinilai bila seluruh insiden bulan tersebut
+        // sudah memiliki hasil SLA. Data yang belum dapat dinilai tidak
+        // dipaksa menjadi 0%.
+        if($belum05>0) {
+            $cap05=null;
+            $status05='belum_dinilai';
+            $analisis05="Ada {$belum05} insiden yang belum dapat dinilai SLA.";
+        } else {
+            $cap05=round(($sesuai05/$total05)*100,4);
+            $status05=$target05===null?'belum_dinilai':($cap05>=$target05?'tercapai':'tidak_tercapai');
+            $analisis05="Otomatis dari Helpdesk IT: {$sesuai05} dari {$total05} insiden selesai sesuai SLA.";
+        }
+
         $periode05=sprintf('%04d-%02d-01',$year,$hm);
         $up05->execute([$im05Id,$periode05,$sesuai05,$total05,$cap05,$target05,
-            "Otomatis dari Helpdesk IT: {$sesuai05} dari {$total05} insiden selesai sesuai SLA.",
+            $analisis05,
             "Tinjau insiden yang melewati SLA dan lakukan RTL sesuai kebutuhan.",
             $status05,$_SESSION['user']['id']??null]);
     }
