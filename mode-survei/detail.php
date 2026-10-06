@@ -131,6 +131,14 @@ require __DIR__.'/../partials/header.php';
                             <?php else: ?>
                                 <span class="badge bg-danger">✕ BELUM ADA</span>
                             <?php endif; ?>
+                            <div class="mt-2 d-flex gap-1 flex-wrap">
+                                <a class="btn btn-sm btn-success" href="/MRMIKIT/dokumen/upload.php?ep_id=<?=urlencode($ep['id'])?>">
+                                    + Upload Dokumen
+                                </a>
+                                <a class="btn btn-sm btn-outline-primary" href="/MRMIKIT/dokumen/index.php?ep_id=<?=urlencode($ep['id'])?>">
+                                    Lihat Dokumen
+                                </a>
+                            </div>
                         </td>
                     </tr>
                 <?php endforeach; ?>
