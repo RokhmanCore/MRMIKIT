@@ -171,7 +171,14 @@ require __DIR__.'/../partials/header.php';
                             <td><?=htmlspecialchars($x['versi']??'-')?></td>
                             <td><?=htmlspecialchars($x['pic_nama']??'-')?></td>
                             <td><?=htmlspecialchars($x['tanggal_review']??'-')?></td>
-                            <td><a class="btn btn-sm btn-outline-success" href="/MRMIKIT/dokumen/view.php?id=<?=$x['id']?>">Lihat</a></td>
+                            <td class="d-flex gap-1 flex-wrap">
+    <a class="btn btn-sm btn-outline-success" href="/MRMIKIT/dokumen/view.php?id=<?=$x['id']?>">Lihat</a>
+    <a class="btn btn-sm btn-outline-danger"
+       href="/MRMIKIT/dokumen/delete.php?id=<?=$x['id']?>"
+       onclick="return confirm('Hapus dokumen aktif ini? Dokumen, keterkaitan EP, riwayat versi, dan file fisiknya akan dihapus. Tindakan ini tidak dapat dibatalkan.')">
+       Hapus
+    </a>
+</td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
