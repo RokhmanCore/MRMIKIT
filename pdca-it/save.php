@@ -1,0 +1,4 @@
+<?php
+require_once __DIR__.'/../config/config.php'; require_once __DIR__.'/../config/auth.php'; require_login();
+$fs=['tanggal_temuan','sumber','masalah','analisis_penyebab','rencana_tindakan','tindakan_perbaikan','pic','target_selesai','status','hasil_verifikasi','bukti']; $d=[]; foreach($fs as $f)$d[$f]=trim((string)($_POST[$f]??'')); if(!$d['tanggal_temuan']||!$d['masalah']||!$d['pic'])die('Data wajib belum lengkap.');
+$q=$pdo->prepare('INSERT INTO pdca_it (tanggal_temuan,sumber,masalah,analisis_penyebab,rencana_tindakan,tindakan_perbaikan,pic,target_selesai,status,hasil_verifikasi,bukti) VALUES (?,?,?,?,?,?,?,?,?,?,?)');$q->execute(array_values($d)); header('Location: ./');
