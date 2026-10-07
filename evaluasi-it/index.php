@@ -1,0 +1,12 @@
+<?php
+require_once __DIR__.'/../config/config.php'; require_once __DIR__.'/../config/auth.php'; require_login();
+$page_title='Evaluasi Berkala Manajemen Informasi';
+$items=$pdo->query('SELECT * FROM evaluasi_it ORDER BY tahun DESC,triwulan DESC')->fetchAll();
+$auto=$pdo->query("SELECT YEAR(tanggal_monitoring) tahun, QUARTER(tanggal_monitoring) triwulan, COUNT(*) jumlah, SUM(keluhan_status='Ada') keluhan FROM audit_monitoring_it GROUP BY YEAR(tanggal_monitoring),QUARTER(tanggal_monitoring) ORDER BY tahun DESC,triwulan DESC")->fetchAll();
+require __DIR__.'/../partials/header.php';
+?>
+<div class="d-flex justify-content-between align-items-center mb-4"><div><h2>Laporan Evaluasi Berkala</h2><div class="text-muted">Rekap evaluasi manajemen informasi berdasarkan monitoring IT.</div></div><a class="btn btn-success" href="form.php">+ Buat Evaluasi</a></div>
+<div class="alert alert-info">Target bukti: <strong>minimal 4 kuartal terakhir</strong>. Data monitoring bulanan dapat menjadi sumber statistik evaluasi.</div>
+<div class="card shadow-sm border-0 mb-4"><div class="card-body"><h5>Data Monitoring per Kuartal</h5><div class="table-responsive"><table class="table"><thead><tr><th>Periode</th><th>Jumlah Monitoring</th><th>Keluhan</th></tr></thead><tbody><?php foreach($auto as $r): ?><tr><td>Q<?=$r['triwulan']?> <?=$r['tahun']?></td><td><?=$r['jumlah']?></td><td><?=$r['keluhan']?></td></tr><?php endforeach; if(!$auto): ?><tr><td colspan="3" class="text-muted">Belum ada data monitoring.</td></tr><?php endif; ?></tbody></table></div></div></div>
+<div class="card shadow-sm border-0"><div class="card-body"><h5>Dokumen Evaluasi</h5><div class="table-responsive"><table class="table align-middle"><thead><tr><th>Periode</th><th>Tanggal</th><th>Petugas</th><th></th></tr></thead><tbody><?php foreach($items as $r): ?><tr><td>Q<?=$r['triwulan']?> <?=$r['tahun']?></td><td><?=htmlspecialchars($r['tanggal_evaluasi'])?></td><td><?=htmlspecialchars($r['petugas'])?></td><td><a class="btn btn-sm btn-outline-success" href="detail.php?id=<?=$r['id']?>">Lihat</a></td></tr><?php endforeach; if(!$items): ?><tr><td colspan="4" class="text-muted">Belum ada laporan evaluasi.</td></tr><?php endif; ?></tbody></table></div></div></div>
+<?php require __DIR__.'/../partials/footer.php'; ?>
