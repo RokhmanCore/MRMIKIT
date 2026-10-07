@@ -26,6 +26,12 @@ if ($data['tanggal_monitoring'] === '' || $data['petugas'] === '') {
     exit;
 }
 
+// Jika tidak ada keluhan, sistem otomatis mencatat hasil monitoring keluhan.
+if ($data['keluhan_status'] !== 'Ada') {
+    $data['keluhan_status'] = 'Tidak ada';
+    $data['keluhan_detail'] = 'Tidak ditemukan keluhan pengguna terkait SIMRS, RME, jaringan, maupun layanan IT selama periode monitoring.';
+}
+
 $sql = 'INSERT INTO audit_monitoring_it (' . implode(',', array_keys($data)) . ')
         VALUES (' . implode(',', array_fill(0, count($data), '?')) . ')';
 
