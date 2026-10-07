@@ -1,47 +1,15 @@
 <?php
-require_once __DIR__.'/../config/config.php';
-require_once __DIR__.'/../config/auth.php';
-require_login();
-$page_title='Input Monitoring IT';
-require __DIR__.'/../partials/header.php';
+require_once __DIR__.'/../config/config.php'; require_once __DIR__.'/../config/auth.php'; require_login(); $page_title='Input Monitoring IT'; require __DIR__.'/../partials/header.php';
 ?>
-<div class="d-flex justify-content-between align-items-center mb-4">
-  <div><h2>Input Monitoring IT</h2><div class="text-muted">Isi satu form untuk satu periode monitoring.</div></div>
-  <a class="btn btn-outline-secondary" href="./">Kembali</a>
-</div>
-<div class="card shadow-sm border-0">
-<div class="card-body">
-<form>
-  <div class="row g-3 mb-3">
-    <div class="col-md-4"><label class="form-label">Tanggal Monitoring</label><input type="date" class="form-control"></div>
-    <div class="col-md-4"><label class="form-label">Periode</label><select class="form-select"><option>Bulanan</option><option>Triwulan</option></select></div>
-    <div class="col-md-4"><label class="form-label">Petugas</label><input class="form-control" placeholder="Nama pemeriksa"></div>
-  </div>
-  <h5 class="mt-4">1. Kepatuhan Sistem</h5>
-  <div class="row g-3"><div class="col-md-8"><label class="form-label">SIMRS/RME digunakan sesuai alur dan kewenangan</label></div><div class="col-md-4"><select class="form-select"><option>Memenuhi</option><option>Tidak Memenuhi</option><option>N/A</option></select></div></div>
-  <textarea class="form-control mt-2" rows="2" placeholder="Catatan / hasil pemeriksaan"></textarea>
-  <h5 class="mt-4">2. Kestabilan Jaringan</h5>
-  <div class="row g-2">
-    <div class="col-md-3"><label>LAN<select class="form-select"><option>Stabil</option><option>Tidak stabil</option></select></label></div>
-    <div class="col-md-3"><label>Wi-Fi<select class="form-select"><option>Stabil</option><option>Tidak stabil</option></select></label></div>
-    <div class="col-md-3"><label>Internet<select class="form-select"><option>Stabil</option><option>Tidak stabil</option></select></label></div>
-    <div class="col-md-3"><label>Server SIMRS<select class="form-select"><option>Stabil</option><option>Tidak stabil</option></select></label></div>
-  </div>
-  <textarea class="form-control mt-2" rows="2" placeholder="Catatan / bukti monitoring jaringan"></textarea>
-  <h5 class="mt-4">3. Kecepatan / Loading RME</h5>
-  <div class="table-responsive"><table class="table table-bordered"><thead><tr><th>Modul</th><th>Hasil</th><th>Catatan</th></tr></thead><tbody>
-    <tr><td>Login</td><td><select class="form-select"><option>Normal</option><option>Lambat</option></select></td><td><input class="form-control"></td></tr>
-    <tr><td>Data Pasien</td><td><select class="form-select"><option>Normal</option><option>Lambat</option></select></td><td><input class="form-control"></td></tr>
-    <tr><td>Pemeriksaan / SOAP</td><td><select class="form-select"><option>Normal</option><option>Lambat</option></select></td><td><input class="form-control"></td></tr>
-    <tr><td>Resep</td><td><select class="form-select"><option>Normal</option><option>Lambat</option></select></td><td><input class="form-control"></td></tr>
-    <tr><td>Pencarian Pasien</td><td><select class="form-select"><option>Normal</option><option>Lambat</option></select></td><td><input class="form-control"></td></tr>
-  </tbody></table></div>
-  <h5 class="mt-4">4. Keluhan User</h5>
-  <div class="mb-2"><label class="form-label">Ada keluhan?</label><select class="form-select"><option>Tidak ada</option><option>Ada</option></select></div>
-  <textarea class="form-control" rows="3" placeholder="Tuliskan keluhan, unit, hasil pemeriksaan dan tindak lanjut bila ada"></textarea>
-  <h5 class="mt-4">Kesimpulan &amp; Tindak Lanjut</h5>
-  <textarea class="form-control" rows="3" placeholder="Kesimpulan monitoring dan tindak lanjut jika ada temuan"></textarea>
-  <div class="mt-4 d-flex gap-2"><button type="button" class="btn btn-success">Simpan Monitoring</button><button type="button" class="btn btn-outline-secondary">Simpan Draft</button></div>
-</form>
-</div></div>
-<?php require __DIR__.'/../partials/footer.php';
+<div class="d-flex justify-content-between align-items-center mb-4"><div><h2>Input Monitoring IT</h2><div class="text-muted">Satu form untuk satu periode monitoring.</div></div><a class="btn btn-outline-secondary" href="./">Kembali</a></div>
+<?php if(($_GET['error']??'')==='required'): ?><div class="alert alert-danger">Tanggal monitoring dan petugas wajib diisi.</div><?php endif; ?>
+<form method="post" action="save.php" enctype="multipart/form-data"><div class="card shadow-sm border-0"><div class="card-body">
+<div class="row g-3"><div class="col-md-4"><label class="form-label">Tanggal Monitoring *</label><input name="tanggal_monitoring" type="date" class="form-control" required></div><div class="col-md-4"><label class="form-label">Periode</label><select name="periode" class="form-select"><option>Bulanan</option><option>Triwulan</option><option>Semester</option><option>Tahunan</option></select></div><div class="col-md-4"><label class="form-label">Petugas *</label><input name="petugas" class="form-control" required placeholder="Nama pemeriksa"></div></div>
+<hr><h5>1. Kepatuhan Sistem</h5><div class="row g-2"><div class="col-md-4"><select name="kepatuhan_status" class="form-select"><option>Memenuhi</option><option>Tidak Memenuhi</option><option>N/A</option></select></div><div class="col-md-8"><input name="kepatuhan_catatan" class="form-control" placeholder="Hasil pemeriksaan / catatan"></div></div>
+<hr><h5>2. Kestabilan Jaringan</h5><div class="row g-2"><div class="col-md-3"><label>LAN<select name="jaringan_lan" class="form-select"><option>Stabil</option><option>Tidak stabil</option><option>N/A</option></select></label></div><div class="col-md-3"><label>Wi-Fi<select name="jaringan_wifi" class="form-select"><option>Stabil</option><option>Tidak stabil</option><option>N/A</option></select></label></div><div class="col-md-3"><label>Internet<select name="jaringan_internet" class="form-select"><option>Stabil</option><option>Tidak stabil</option><option>N/A</option></select></label></div><div class="col-md-3"><label>Server SIMRS<select name="jaringan_server" class="form-select"><option>Stabil</option><option>Tidak stabil</option><option>N/A</option></select></label></div></div><textarea name="jaringan_catatan" class="form-control mt-2" rows="2" placeholder="Catatan hasil monitoring jaringan"></textarea>
+<hr><h5>3. Kecepatan / Loading RME</h5><div class="table-responsive"><table class="table table-bordered"><thead><tr><th>Modul</th><th>Hasil</th></tr></thead><tbody><?php foreach(['login'=>'Login','data_pasien'=>'Data Pasien','soap'=>'Pemeriksaan / SOAP','resep'=>'Resep','pencarian'=>'Pencarian Pasien'] as $k=>$label): ?><tr><td><?=$label?></td><td><select name="rme_<?=$k?>" class="form-select"><option>Normal</option><option>Lambat</option><option>N/A</option></select></td></tr><?php endforeach; ?></tbody></table></div><textarea name="rme_catatan" class="form-control" rows="2" placeholder="Catatan hasil pengamatan/pengukuran loading RME"></textarea>
+<hr><h5>4. Keluhan User</h5><select name="keluhan_status" class="form-select mb-2"><option>Tidak ada</option><option>Ada</option></select><textarea name="keluhan_detail" class="form-control" rows="3" placeholder="Unit, keluhan, hasil pemeriksaan dan tindak lanjut bila ada"></textarea>
+<hr><h5>Kesimpulan &amp; Tindak Lanjut</h5><textarea name="kesimpulan" class="form-control mb-2" rows="2" placeholder="Kesimpulan monitoring"></textarea><textarea name="tindak_lanjut" class="form-control" rows="2" placeholder="Tindak lanjut bila ada temuan"></textarea>
+<hr><h5>Evidence / Bukti</h5><input type="file" name="evidence[]" class="form-control" multiple accept=".jpg,.jpeg,.png,.pdf,.webp"><div class="form-text">Bisa pilih lebih dari satu file.</div>
+<div class="mt-4"><button class="btn btn-success">Simpan Monitoring</button></div></div></div></form>
+<?php require __DIR__.'/../partials/footer.php'; ?>
