@@ -16,6 +16,11 @@ $imgExt=['image/jpeg','image/png','image/webp'];
 </div>
 
 <div class="print-report">
+  <div class="hospital-print-header">
+    <div class="hospital-name">RSU PERMATA MEDIKA KEBUMEN</div>
+    <div class="hospital-sub">Dokumen Internal · Instalasi Teknologi Informasi</div>
+    <div class="hospital-rule"></div>
+  </div>
   <div class="report-header">
     <div class="report-title">FORM AUDIT / MONITORING IT</div>
     <div class="report-subtitle">Sistem Informasi, SIMRS & Rekam Medis Elektronik</div>
@@ -92,7 +97,8 @@ $imgExt=['image/jpeg','image/png','image/webp'];
 .meta-table,.result-table{width:100%;border-collapse:collapse}.meta-table td{border:1px solid #ccc;padding:7px;font-size:12px}.meta-table td:nth-child(odd){background:#f5f5f5;font-weight:600;width:18%}
 .section{margin:0 0 16px}.section-title{font-weight:700;background:#eef7f1;border-left:5px solid #198754;padding:7px 9px;margin-bottom:8px}.result-table th,.result-table td{border:1px solid #bbb;padding:7px;font-size:12px}.result-table th{background:#f3f3f3}.status-box,.normal,.finding,.note,.text-block{border:1px solid #ccc;border-radius:4px;padding:8px;font-size:12px}.normal{border-left:4px solid #198754}.normal span{font-weight:normal}.finding{border-left:4px solid #dc3545}.note{margin-top:7px;background:#fafafa}.label{font-weight:700;font-size:12px;margin:7px 0 3px}.text-block{min-height:30px}.muted{color:#777;font-size:12px}
 .evidence-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.evidence-item{border:1px solid #ccc;padding:6px;text-align:center;break-inside:avoid}.evidence-item img{display:block;max-width:100%;height:auto;max-height:360px;margin:0 auto 5px;object-fit:contain}.evidence-item div{font-size:10px;word-break:break-word}.evidence-file{border:1px solid #ccc;padding:12px;font-size:12px;break-inside:avoid}
-.report-footer{display:none!important}.signature{display:flex;justify-content:flex-end;margin-top:30px}.signature-box{width:280px;text-align:center;font-size:12px}.signature-space{height:80px}.report-footer{text-align:center;border-top:1px solid #ccc;margin-top:25px;padding-top:8px;font-size:9px;color:#777}
+.hospital-print-header{display:none}.report-footer{display:none!important}
+@media print{.hospital-print-header{display:block;text-align:center;margin:0 0 14px;padding:0 0 8px}.hospital-name{font-size:11pt;font-weight:700;letter-spacing:.4px}.hospital-sub{font-size:8pt;color:#444;margin-top:2px}.hospital-rule{border-bottom:1.5px solid #222;margin-top:6px}}.signature{display:flex;justify-content:flex-end;margin-top:30px}.signature-box{width:280px;text-align:center;font-size:12px}.signature-space{height:80px}.report-footer{text-align:center;border-top:1px solid #ccc;margin-top:25px;padding-top:8px;font-size:9px;color:#777}
 @media print{
   @page{size:A4;margin:12mm}
   body{background:#fff!important}
