@@ -1,6 +1,11 @@
 <?php
 require_once __DIR__.'/../config/config.php'; require_once __DIR__.'/../config/auth.php'; require_login();
 $id=(int)($_GET['id']??0); if(!$id) die('ID tidak valid');
+$download=isset($_GET['download']) && $_GET['download']==='pdf';
+if($download){
+    // Render report page directly in print mode; browser's print dialog allows Save as PDF.
+    echo '<script>window.addEventListener("load",function(){window.print();});</script>';
+}
 $s=$pdo->prepare('SELECT * FROM audit_monitoring_it WHERE id=?'); $s->execute([$id]); $row=$s->fetch(); if(!$row) die('Data tidak ditemukan');
 $e=$pdo->prepare('SELECT * FROM audit_monitoring_it_evidence WHERE audit_id=? ORDER BY id ASC'); $e->execute([$id]); $files=$e->fetchAll();
 $page_title='Detail Monitoring IT'; require __DIR__.'/../partials/header.php';
@@ -10,7 +15,7 @@ $bulanId=['January'=>'Januari','February'=>'Februari','March'=>'Maret','April'=>
 $bulanTampil=($bulanId[date('F',strtotime($row['tanggal_monitoring']))]??date('F',strtotime($row['tanggal_monitoring']))).' '.date('Y',strtotime($row['tanggal_monitoring']));
 $imgExt=['image/jpeg','image/png','image/webp'];
 ?>
-<div class="no-print d-flex justify-content-between align-items-center mb-4">
+<div class="no-print d-flex justify-content-between align-items-center mb-4" <?= $download ? 'style="display:none!important"' : '' ?>>
   <div><h2 class="mb-1">Detail Monitoring IT #<?=$row['id']?></h2><div class="text-muted">Monitoring Bulanan <?=$bulanTampil?> · <?=htmlspecialchars($row['petugas'])?></div></div>
   <div><button onclick="window.print()" class="btn btn-primary">🖨 Cetak Laporan</button> <a class="btn btn-outline-secondary" href="./">Kembali</a></div>
 </div>
