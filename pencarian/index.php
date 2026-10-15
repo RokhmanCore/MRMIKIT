@@ -70,7 +70,8 @@ if ($q !== '') {
                 CONCAT('Batch: ', b.nama_batch, ' · Tahun ', f.tahun_sumber) AS subjudul,
                 f.status AS status,
                 'Arsip Import' AS sumber,
-                CONCAT('/MRMIKIT/import-lama/mapping.php?id=', f.batch_id) AS url
+                CONCAT('/MRMIKIT/import-lama/mapping.php?id=', f.batch_id) AS url,
+                CONCAT('/MRMIKIT/import-lama/download.php?id=', f.id) AS download_url
          FROM import_file f
          INNER JOIN import_batch b ON b.id = f.batch_id
          WHERE f.original_name LIKE ? OR f.relative_path LIKE ? OR b.nama_batch LIKE ?
