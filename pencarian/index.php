@@ -12,7 +12,8 @@ if ($q !== '') {
 
     $stmt = $pdo->prepare(
         "SELECT d.id, d.nama AS judul, d.kategori AS subjudul, d.status_akreditasi AS status,
-                'Dokumen IT' AS sumber, CONCAT('/MRMIKIT/dokumen/view.php?id=', d.id) AS url
+                'Dokumen IT' AS sumber, CONCAT('/MRMIKIT/dokumen/view.php?id=', d.id) AS url,
+                CONCAT('/MRMIKIT/uploads/', d.filename) AS download_url
          FROM dokumen d
          LEFT JOIN pic p ON p.id = d.pic_id
          WHERE d.nama LIKE ? OR d.original_name LIKE ? OR d.kategori LIKE ?
@@ -26,7 +27,8 @@ if ($q !== '') {
         "SELECT b.id, b.judul, CONCAT(b.jenis, ' · ', COALESCE(b.deskripsi,'')) AS subjudul,
                 DATE_FORMAT(b.tanggal_bukti,'%Y-%m-%d') AS status,
                 'Bukti Implementasi' AS sumber,
-                CONCAT('/MRMIKIT/uploads/', b.filename) AS url
+                CONCAT('/MRMIKIT/uploads/', b.filename) AS url,
+                CONCAT('/MRMIKIT/uploads/', b.filename) AS download_url
          FROM bukti_implementasi b
          LEFT JOIN pic p ON p.id = b.pic_id
          WHERE b.judul LIKE ? OR b.original_name LIKE ? OR b.jenis LIKE ?
@@ -120,7 +122,12 @@ require __DIR__ . '/../partials/header.php';
                             <td><?=htmlspecialchars($r['judul'])?></td>
                             <td><?=htmlspecialchars($r['subjudul'] ?? '-')?></td>
                             <td><?=htmlspecialchars($r['status'] ?? '-')?></td>
-                            <td><a class="btn btn-sm btn-outline-success" href="<?=htmlspecialchars($r['url'])?>" target="_blank">Buka</a></td>
+                            <td class="text-nowrap">
+                                <a class="btn btn-sm btn-outline-success" href="<?=htmlspecialchars($r['url'])?>" target="_blank">Buka</a>
+                                <?php if(!empty($r['download_url'])): ?>
+                                    <a class="btn btn-sm btn-outline-primary" href="<?=htmlspecialchars($r['download_url'])?>" download>Download</a>
+                                <?php endif; ?>
+                            </td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
